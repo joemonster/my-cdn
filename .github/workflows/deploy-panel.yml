@@ -1,0 +1,41 @@
+name: Deploy Panel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/panel/**'
+      - '.github/workflows/deploy-panel.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy Panel to Cloudflare Pages
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'apps/panel/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: apps/panel
+
+      - name: Build
+        run: npm run build
+        working-directory: apps/panel
+        env:
+          NEXT_PUBLIC_API_URL: ${{ vars.API_URL }}
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          command: pages deploy apps/panel/out --project-name=my-cdn-panel

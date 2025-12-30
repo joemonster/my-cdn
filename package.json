@@ -1,0 +1,30 @@
+{
+  "name": "my-cdn",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal file hosting CDN with Cloudflare Workers + R2 + D1",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:panel": "npm run dev --workspace=apps/panel",
+    "build:api": "npm run build --workspace=apps/api",
+    "build:panel": "npm run build --workspace=apps/panel",
+    "deploy:api": "npm run deploy --workspace=apps/api",
+    "deploy:panel": "npm run deploy --workspace=apps/panel"
+  },
+  "keywords": [
+    "cdn",
+    "cloudflare",
+    "workers",
+    "r2",
+    "d1",
+    "file-hosting"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
