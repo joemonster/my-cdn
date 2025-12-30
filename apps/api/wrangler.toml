@@ -6,7 +6,7 @@ compatibility_date = "2024-01-01"
 API_KEY = "22d-49f5-af40-c98"
 ADMIN_USERNAME = "joe"
 ADMIN_PASSWORD = "!monster!"
-CDN_BASE_URL = "https://my-cdn.literalnie.workers.dev"
+CDN_BASE_URL = "https://my-cdn-api.literalnie.workers.dev"
 
 [[d1_databases]]
 binding = "DB"
