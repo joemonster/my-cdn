@@ -13,12 +13,14 @@ import {
   Video,
   LayoutGrid,
   Loader2,
+  HelpCircle,
 } from 'lucide-react';
 import { api, FileData, SortField, SortOrder, FileTypeFilter, PaginationInfo } from '@/lib/api';
 import { FileTable } from '@/components/FileTable';
 import { UploadModal } from '@/components/UploadModal';
 import { FilePreview } from '@/components/FilePreview';
 import { Pagination } from '@/components/Pagination';
+import { ApiDocsModal } from '@/components/ApiDocsModal';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
@@ -46,6 +48,7 @@ export default function DashboardPage() {
 
   // Modals
   const [showUpload, setShowUpload] = useState(false);
+  const [showApiDocs, setShowApiDocs] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileData | null>(null);
 
   // Check authentication
@@ -160,6 +163,14 @@ export default function DashboardPage() {
               >
                 <Upload className="w-4 h-4" />
                 <span className="hidden sm:inline">Upload</span>
+              </button>
+              <button
+                onClick={() => setShowApiDocs(true)}
+                className="p-2 rounded-lg bg-dark-600 hover:bg-neon-cyan/20 hover:text-neon-cyan
+                         transition-colors"
+                title="API Documentation"
+              >
+                <HelpCircle className="w-5 h-5" />
               </button>
               <button
                 onClick={handleLogout}
@@ -292,6 +303,14 @@ export default function DashboardPage() {
       {/* Preview Modal */}
       {previewFile && (
         <FilePreview file={previewFile} onClose={() => setPreviewFile(null)} />
+      )}
+
+      {/* API Docs Modal */}
+      {showApiDocs && (
+        <ApiDocsModal
+          onClose={() => setShowApiDocs(false)}
+          apiUrl={process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'}
+        />
       )}
     </div>
   );
