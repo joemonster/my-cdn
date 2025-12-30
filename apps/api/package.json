@@ -1,0 +1,23 @@
+{
+  "name": "@my-cdn/api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create my-cdn-db",
+    "db:migrate": "wrangler d1 execute my-cdn-db --file=schema.sql",
+    "db:migrate:local": "wrangler d1 execute my-cdn-db --local --file=schema.sql",
+    "r2:create": "wrangler r2 bucket create my-cdn-files"
+  },
+  "dependencies": {
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.99.0"
+  }
+}
