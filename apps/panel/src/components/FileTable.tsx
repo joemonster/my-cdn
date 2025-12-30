@@ -153,10 +153,10 @@ export function FileTable({
   }
 
   return (
-    <div className="bg-dark-800 rounded-xl border border-dark-600 overflow-hidden">
+    <div className="bg-dark-800 rounded-xl border border-dark-600 overflow-visible">
       {/* Table Header */}
       <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_100px_150px_80px] gap-4 p-4
-                     bg-dark-700 border-b border-dark-600">
+                     bg-dark-700 border-b border-dark-600 rounded-t-xl">
         <span className="text-xs uppercase tracking-wide text-gray-500">Preview</span>
         <SortHeader field="original_name">Name</SortHeader>
         <span className="text-xs uppercase tracking-wide text-gray-500">Type</span>
