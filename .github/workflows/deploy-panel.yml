@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install wrangler
+        run: npm install -g wrangler
+
       - name: Install dependencies
         run: npm install
         working-directory: apps/panel
@@ -35,9 +38,9 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: ${{ vars.API_URL }}
 
+      - name: Create Pages project if not exists
+        continue-on-error: true
+        run: wrangler pages project create my-cdn-panel --production-branch=main
+
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          accountId: ${{ secrets.CF_ACCOUNT_ID }}
-          command: pages deploy apps/panel/out --project-name=my-cdn-panel
+        run: wrangler pages deploy apps/panel/out --project-name=my-cdn-panel --commit-dirty=true

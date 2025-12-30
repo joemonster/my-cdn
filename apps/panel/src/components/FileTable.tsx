@@ -294,7 +294,7 @@ export function FileTable({
                       className="fixed inset-0 z-10"
                       onClick={() => setActionMenuId(null)}
                     />
-                    <div className="absolute right-0 top-full mt-1 z-20 bg-dark-700 border border-dark-500
+                    <div className="absolute right-0 bottom-full mb-1 z-20 bg-dark-700 border border-dark-500
                                   rounded-lg shadow-lg py-1 min-w-[140px]">
                       <button
                         onClick={() => {
