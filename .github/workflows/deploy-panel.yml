@@ -43,4 +43,4 @@ jobs:
         run: wrangler pages project create my-cdn-panel --production-branch=main
 
       - name: Deploy to Cloudflare Pages
-        run: wrangler pages deploy apps/panel/out --project-name=my-cdn-panel --commit-dirty=true
+        run: wrangler pages deploy apps/panel/out --project-name=my-cdn-panel --branch=main --commit-dirty=true
