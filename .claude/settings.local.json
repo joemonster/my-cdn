@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: convert wrangler.toml to wrangler.jsonc for newer Wrangler compatibility\n\nNewer versions of Wrangler prefer JSON configuration format. Also adds CLAUDE.md for repository documentation.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git config:*)"
+    ]
+  }
+}
