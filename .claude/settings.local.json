@@ -3,7 +3,11 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: convert wrangler.toml to wrangler.jsonc for newer Wrangler compatibility\n\nNewer versions of Wrangler prefer JSON configuration format. Also adds CLAUDE.md for repository documentation.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx wrangler deploy:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nrefactor: simplify API code with response helpers\n\n- Add utils/response.ts with jsonResponse, errorResponse, successResponse helpers\n- Remove ~250 lines of repetitive Response construction code\n- Remove unused functions: generateSessionToken, buildFileUrl, extractPathFromUrl, getContentTypeFromPath\n- Extract shared getYearMonth helper in storage.ts\n- Fix deploy workflow to explicitly specify entry point\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
