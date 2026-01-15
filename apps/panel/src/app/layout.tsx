@@ -5,6 +5,9 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'My CDN - Admin Panel',
   description: 'Personal file hosting CDN admin panel',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
