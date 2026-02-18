@@ -3,6 +3,7 @@ import { validateApiKey, validateAdminCredentials } from './middleware/auth';
 import { handleUpload } from './routes/upload';
 import { handleGetFiles } from './routes/files';
 import { handleGetFile, handleUpdateFile, handleDeleteFile } from './routes/file';
+import { handleAiGenerate, cleanupExpiredImages } from './routes/aigenerate';
 import { getFromR2 } from './utils/storage';
 import { jsonResponse, errorResponse, successResponse } from './utils/response';
 
@@ -14,6 +15,10 @@ const corsHeaders = {
 };
 
 export default {
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await cleanupExpiredImages(env);
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -27,6 +32,8 @@ export default {
 
       if (path.match(/^\/\d{6}\/[\w-]+\.\w+$/)) {
         response = await handleFileServing(env, path);
+      } else if (path.match(/^\/ai-gen\/\d{4}-\d{2}-\d{2}\/[\w-]+\.png$/)) {
+        response = await handleAiGenFileServing(env, path);
       } else if (path.startsWith('/api/')) {
         response = await handleApiRoutes(request, env, path);
       } else if (path.startsWith('/panel')) {
@@ -80,6 +87,25 @@ async function handleFileServing(env: Env, path: string): Promise<Response> {
   });
 }
 
+async function handleAiGenFileServing(env: Env, path: string): Promise<Response> {
+  const storedPath = path.substring(1);
+  const object = await getFromR2(env.BUCKET, storedPath);
+
+  if (!object) {
+    return new Response('File not found', { status: 404 });
+  }
+
+  return new Response(object.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=86400',
+      'Content-Length': object.size.toString(),
+      'ETag': object.etag,
+    },
+  });
+}
+
 async function handleApiRoutes(request: Request, env: Env, path: string): Promise<Response> {
   if (path === '/api/auth/login' && request.method === 'POST') {
     return handleLogin(request, env);
@@ -92,6 +118,10 @@ async function handleApiRoutes(request: Request, env: Env, path: string): Promis
 
   if (path === '/api/upload' && request.method === 'POST') {
     return handleUpload(request, env);
+  }
+
+  if (path === '/api/images/aigenerate' && request.method === 'POST') {
+    return handleAiGenerate(request, env);
   }
 
   if (path === '/api/files' && request.method === 'GET') {

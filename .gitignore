@@ -27,6 +27,13 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.dev.vars
+
+# wrangler local state
+.wrangler/
+
+# specstory
+.specstory/
 
 # vercel
 .vercel

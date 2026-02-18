@@ -5,6 +5,7 @@ export interface Env {
   ADMIN_USERNAME: string;
   ADMIN_PASSWORD: string;
   CDN_BASE_URL: string;
+  VERCEL_AI_KEY: string;
 }
 
 export interface FileRecord {
