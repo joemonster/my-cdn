@@ -157,6 +157,62 @@ Delete a file.
 
 ---
 
+### POST /api/images/aigenerate
+Generate images using AI models via Vercel AI Gateway.
+
+**Accepts:** JSON (\`application/json\`) or multipart form (\`multipart/form-data\`)
+
+**Available models:**
+- \`nano-banana-pro\` — Gemini 3 Pro (multimodal, supports source images)
+- \`nano-banana\` — Gemini 2.5 Flash (multimodal, supports source images)
+- \`imagen\` — Google Imagen 4.0 (image-only)
+- \`flux\` — Flux 2 Pro (image-only)
+
+**JSON Request:**
+\`\`\`json
+{
+  "model": "imagen",
+  "prompt": "A cat wearing sunglasses",
+  "source_image_url": "https://example.com/photo.jpg",
+  "options": {
+    "aspect_ratio": "16:9",
+    "n": 1
+  }
+}
+\`\`\`
+
+**Multipart form fields:**
+- \`model\` (required) — model name
+- \`prompt\` (required) — text prompt, max 10000 chars
+- \`image\` (optional) — source image file (multimodal models only)
+- \`source_image_url\` (optional) — source image URL (multimodal models only)
+- \`aspect_ratio\` (optional) — e.g. "16:9" (image-only models)
+- \`n\` (optional) — number of images, 1-4
+
+**Response (200):**
+\`\`\`json
+{
+  "status": "completed",
+  "images": [
+    {
+      "url": "${apiUrl}/ai-gen/2026-02-18/imgn-abc123.png",
+      "expires_at": "2026-02-19T10:00:00Z"
+    }
+  ],
+  "model_used": "google/imagen-4.0-generate",
+  "duration_ms": 8500
+}
+\`\`\`
+
+**Error codes:** INVALID_JSON, MISSING_PROMPT, INVALID_MODEL, CONTENT_FILTERED (422), RATE_LIMITED (429), TIMEOUT (504), MODEL_EMPTY_RESPONSE (502), API_ERROR (502), R2_UPLOAD_FAILED (502)
+
+**Notes:**
+- Generated images are stored in R2 with 24h TTL (auto-deleted by daily cron)
+- Source images (\`image\` or \`source_image_url\`) only work with multimodal models (nano-banana, nano-banana-pro)
+- File names are prefixed with model shortcode: imgn-, flux-, nb-, nbpro-
+
+---
+
 ### GET /:path (Public - No Auth Required)
 Serve files directly. No authentication needed.
 
@@ -173,6 +229,23 @@ Returns the file with appropriate Content-Type and caching headers.
 curl -X POST ${apiUrl}/api/upload \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F "file=@photo.jpg"
+\`\`\`
+
+### Generate image (JSON):
+\`\`\`bash
+curl -X POST ${apiUrl}/api/images/aigenerate \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "imagen", "prompt": "A cat wearing sunglasses"}'
+\`\`\`
+
+### Generate image with source (form upload):
+\`\`\`bash
+curl -X POST ${apiUrl}/api/images/aigenerate \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -F "model=nano-banana-pro" \\
+  -F "prompt=Translate all text to Polish" \\
+  -F "image=@source.png"
 \`\`\`
 
 ### List files:
@@ -359,6 +432,18 @@ All errors return JSON with this format:
                 <p className="text-gray-400 text-sm">Delete a file</p>
               </div>
 
+              {/* AI Generate */}
+              <div className="mb-6 p-4 bg-dark-700 rounded-lg border border-purple-500/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs font-mono rounded">POST</span>
+                  <code className="text-white font-mono">/api/images/aigenerate</code>
+                  <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded">AI</span>
+                </div>
+                <p className="text-gray-400 text-sm mb-2">Generate images with AI (JSON or multipart/form-data)</p>
+                <p className="text-gray-500 text-xs mb-1">Models: nano-banana-pro, nano-banana, imagen, flux</p>
+                <p className="text-gray-500 text-xs">Supports source image upload for multimodal models (editing/translation)</p>
+              </div>
+
               {/* Serve file */}
               <div className="mb-6 p-4 bg-dark-700 rounded-lg border border-neon-cyan/30">
                 <div className="flex items-center gap-2 mb-2">
@@ -396,6 +481,31 @@ All errors return JSON with this format:
 {`curl -X POST ${apiUrl}/api/upload \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -F "file=@photo.jpg"`}
+                </pre>
+              </div>
+
+              <div className="bg-dark-700 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-400">Generate image (cURL)</span>
+                  <button
+                    onClick={() => copyToClipboard(
+                      `curl -X POST ${apiUrl}/api/images/aigenerate \\\n  -H "Authorization: Bearer YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model": "imagen", "prompt": "A cat wearing sunglasses"}'`,
+                      'curl-aigen'
+                    )}
+                    className="p-1 rounded hover:bg-dark-500"
+                  >
+                    {copiedSection === 'curl-aigen' ? (
+                      <Check className="w-4 h-4 text-neon-cyan" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+                <pre className="text-sm text-green-400 overflow-x-auto">
+{`curl -X POST ${apiUrl}/api/images/aigenerate \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model": "imagen", "prompt": "A cat wearing sunglasses"}'`}
                 </pre>
               </div>
 
