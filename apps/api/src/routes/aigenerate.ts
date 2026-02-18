@@ -1,5 +1,8 @@
+import { v4 as uuidv4 } from 'uuid';
 import { Env } from '../types';
 import { jsonResponse, errorResponse } from '../utils/response';
+import { uploadToR2 as uploadToR2Permanent, generateStoragePath, generateFileHash } from '../utils/storage';
+import { insertFile, getFileById, fileRecordToResponse } from '../utils/db';
 
 // --- Model Registry ---
 
@@ -47,6 +50,7 @@ interface GenerateRequest {
   model: string;
   prompt: string;
   source_image_url?: string;
+  ephemeral?: boolean;
   options?: {
     aspect_ratio?: string;
     n?: number;
@@ -289,10 +293,16 @@ async function generateWithRetry(
 
 // --- R2 upload ---
 
-async function uploadToR2(env: Env, base64Images: string[], modelPrefix: string): Promise<Array<{ url: string; expires_at: string }> | Response> {
+interface UploadedImage {
+  url: string;
+  expires_at?: string;
+  file_id?: string;
+}
+
+async function uploadEphemeral(env: Env, base64Images: string[], modelPrefix: string): Promise<UploadedImage[] | Response> {
   const datePrefix = new Date().toISOString().slice(0, 10);
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const results: Array<{ url: string; expires_at: string }> = [];
+  const results: UploadedImage[] = [];
 
   for (const b64 of base64Images) {
     const id = crypto.randomUUID().slice(0, 12);
@@ -303,10 +313,50 @@ async function uploadToR2(env: Env, base64Images: string[], modelPrefix: string)
       await env.BUCKET.put(key, buffer, {
         httpMetadata: { contentType: 'image/png' },
       });
-      results.push({
-        url: `${env.CDN_BASE_URL}/${key}`,
-        expires_at: expiresAt,
+      results.push({ url: `${env.CDN_BASE_URL}/${key}`, expires_at: expiresAt });
+    } catch (err) {
+      console.error('R2 upload failed:', err);
+      return genErrorResponse('R2_UPLOAD_FAILED', 'Failed to upload generated image to storage', 502);
+    }
+  }
+
+  return results;
+}
+
+async function uploadPermanent(env: Env, base64Images: string[], modelPrefix: string, prompt: string): Promise<UploadedImage[] | Response> {
+  const results: UploadedImage[] = [];
+
+  for (const b64 of base64Images) {
+    try {
+      const buffer = base64ToArrayBuffer(b64);
+      const hash = await generateFileHash(buffer);
+      const storedPath = generateStoragePath(hash, 'png');
+
+      await uploadToR2Permanent(env.BUCKET, storedPath, buffer, 'image/png');
+
+      const fileId = uuidv4();
+      const name = `${modelPrefix}-${prompt.slice(0, 60).replace(/[^a-zA-Z0-9 _-]/g, '').trim()}.png`;
+
+      await insertFile(env.DB, {
+        id: fileId,
+        original_name: name,
+        stored_path: storedPath,
+        mime_type: 'image/png',
+        file_size: buffer.byteLength,
+        file_type: 'image',
+        width: null,
+        height: null,
+        duration: null,
+        thumbnail_path: null,
       });
+
+      const record = await getFileById(env.DB, fileId);
+      if (record) {
+        const fileResp = fileRecordToResponse(record, env.CDN_BASE_URL);
+        results.push({ url: fileResp.url, file_id: fileId });
+      } else {
+        results.push({ url: `${env.CDN_BASE_URL}/${storedPath}`, file_id: fileId });
+      }
     } catch (err) {
       console.error('R2 upload failed:', err);
       return genErrorResponse('R2_UPLOAD_FAILED', 'Failed to upload generated image to storage', 502);
@@ -329,6 +379,7 @@ async function parseRequest(request: Request): Promise<GenerateRequest | Respons
       const sourceImageUrl = formData.get('source_image_url') as string | null;
       const aspectRatio = formData.get('aspect_ratio') as string | null;
       const nStr = formData.get('n') as string | null;
+      const ephemeralStr = formData.get('ephemeral') as string | null;
       const file = formData.get('image') as File | null;
 
       let imageDataUri = sourceImageUrl || undefined;
@@ -344,6 +395,7 @@ async function parseRequest(request: Request): Promise<GenerateRequest | Respons
         model: model || '',
         prompt: prompt || '',
         source_image_url: imageDataUri,
+        ephemeral: ephemeralStr === 'true' || ephemeralStr === '1',
         options: {
           aspect_ratio: aspectRatio || undefined,
           n: nStr ? parseInt(nStr, 10) : undefined,
@@ -385,19 +437,23 @@ export async function handleAiGenerate(request: Request, env: Env): Promise<Resp
   const n = Math.min(Math.max(body.options?.n || 1, 1), MAX_N);
   const aspectRatio = body.options?.aspect_ratio;
   const sourceImageUrl = body.source_image_url;
+  const ephemeral = body.ephemeral === true;
 
   // Generate
   const genResult = await generateWithRetry(env, body.model, body.prompt.trim(), n, sourceImageUrl, aspectRatio);
   if (genResult instanceof Response) return genResult;
 
   // Upload to R2
-  const uploadResult = await uploadToR2(env, genResult.base64Images, genResult.modelPrefix);
+  const uploadResult = ephemeral
+    ? await uploadEphemeral(env, genResult.base64Images, genResult.modelPrefix)
+    : await uploadPermanent(env, genResult.base64Images, genResult.modelPrefix, body.prompt.trim());
   if (uploadResult instanceof Response) return uploadResult;
 
   return jsonResponse({
     status: 'completed',
     images: uploadResult,
     model_used: genResult.modelUsed,
+    ephemeral,
     duration_ms: Date.now() - startTime,
   });
 }
