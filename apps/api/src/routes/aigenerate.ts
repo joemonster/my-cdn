@@ -318,16 +318,56 @@ async function uploadToR2(env: Env, base64Images: string[], modelPrefix: string)
 
 // --- Main handler ---
 
-export async function handleAiGenerate(request: Request, env: Env): Promise<Response> {
-  const startTime = Date.now();
+async function parseRequest(request: Request): Promise<GenerateRequest | Response> {
+  const contentType = request.headers.get('Content-Type') || '';
 
-  // Parse body
-  let body: GenerateRequest;
+  if (contentType.includes('multipart/form-data')) {
+    try {
+      const formData = await request.formData();
+      const model = formData.get('model') as string | null;
+      const prompt = formData.get('prompt') as string | null;
+      const sourceImageUrl = formData.get('source_image_url') as string | null;
+      const aspectRatio = formData.get('aspect_ratio') as string | null;
+      const nStr = formData.get('n') as string | null;
+      const file = formData.get('image') as File | null;
+
+      let imageDataUri = sourceImageUrl || undefined;
+
+      if (file && file.size > 0) {
+        const buffer = await file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const mime = file.type || 'image/png';
+        imageDataUri = `data:${mime};base64,${base64}`;
+      }
+
+      return {
+        model: model || '',
+        prompt: prompt || '',
+        source_image_url: imageDataUri,
+        options: {
+          aspect_ratio: aspectRatio || undefined,
+          n: nStr ? parseInt(nStr, 10) : undefined,
+        },
+      };
+    } catch {
+      return genErrorResponse('INVALID_JSON', 'Invalid multipart form data', 400);
+    }
+  }
+
   try {
-    body = await request.json() as GenerateRequest;
+    return await request.json() as GenerateRequest;
   } catch {
     return genErrorResponse('INVALID_JSON', 'Invalid JSON in request body', 400);
   }
+}
+
+export async function handleAiGenerate(request: Request, env: Env): Promise<Response> {
+  const startTime = Date.now();
+
+  // Parse body (JSON or multipart/form-data)
+  const parsed = await parseRequest(request);
+  if (parsed instanceof Response) return parsed;
+  const body = parsed;
 
   // Validate
   if (!body.prompt || typeof body.prompt !== 'string' || body.prompt.trim().length === 0) {
