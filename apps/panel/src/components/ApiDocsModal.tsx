@@ -173,6 +173,7 @@ Generate images using AI models via Vercel AI Gateway.
 {
   "model": "imagen",
   "prompt": "A cat wearing sunglasses",
+  "ephemeral": false,
   "source_image_url": "https://example.com/photo.jpg",
   "options": {
     "aspect_ratio": "16:9",
@@ -184,12 +185,29 @@ Generate images using AI models via Vercel AI Gateway.
 **Multipart form fields:**
 - \`model\` (required) — model name
 - \`prompt\` (required) — text prompt, max 10000 chars
+- \`ephemeral\` (optional, default: false) — if true, image expires after 24h; if false, saved permanently
 - \`image\` (optional) — source image file (multimodal models only)
 - \`source_image_url\` (optional) — source image URL (multimodal models only)
 - \`aspect_ratio\` (optional) — e.g. "16:9" (image-only models)
 - \`n\` (optional) — number of images, 1-4
 
-**Response (200):**
+**Response — permanent (default, ephemeral=false):**
+\`\`\`json
+{
+  "status": "completed",
+  "images": [
+    {
+      "url": "${apiUrl}/202602/abc123hash.png",
+      "file_id": "uuid"
+    }
+  ],
+  "model_used": "google/imagen-4.0-generate",
+  "ephemeral": false,
+  "duration_ms": 8500
+}
+\`\`\`
+
+**Response — ephemeral (ephemeral=true):**
 \`\`\`json
 {
   "status": "completed",
@@ -200,6 +218,7 @@ Generate images using AI models via Vercel AI Gateway.
     }
   ],
   "model_used": "google/imagen-4.0-generate",
+  "ephemeral": true,
   "duration_ms": 8500
 }
 \`\`\`
@@ -207,7 +226,8 @@ Generate images using AI models via Vercel AI Gateway.
 **Error codes:** INVALID_JSON, MISSING_PROMPT, INVALID_MODEL, CONTENT_FILTERED (422), RATE_LIMITED (429), TIMEOUT (504), MODEL_EMPTY_RESPONSE (502), API_ERROR (502), R2_UPLOAD_FAILED (502)
 
 **Notes:**
-- Generated images are stored in R2 with 24h TTL (auto-deleted by daily cron)
+- By default (ephemeral=false), images are saved permanently with a DB record (visible in panel, manageable via /api/file/:id)
+- With ephemeral=true, images are stored in R2 with 24h TTL (auto-deleted by daily cron)
 - Source images (\`image\` or \`source_image_url\`) only work with multimodal models (nano-banana, nano-banana-pro)
 - File names are prefixed with model shortcode: imgn-, flux-, nb-, nbpro-
 
@@ -441,6 +461,7 @@ All errors return JSON with this format:
                 </div>
                 <p className="text-gray-400 text-sm mb-2">Generate images with AI (JSON or multipart/form-data)</p>
                 <p className="text-gray-500 text-xs mb-1">Models: nano-banana-pro, nano-banana, imagen, flux</p>
+                <p className="text-gray-500 text-xs mb-1">Default: saved permanently (with DB record). Set ephemeral=true for 24h TTL</p>
                 <p className="text-gray-500 text-xs">Supports source image upload for multimodal models (editing/translation)</p>
               </div>
 
