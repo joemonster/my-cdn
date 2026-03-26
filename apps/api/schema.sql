@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS files (
     height INTEGER,
     duration INTEGER,
     thumbnail_path TEXT,
+    bucket TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -19,3 +20,4 @@ CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
 CREATE INDEX IF NOT EXISTS idx_files_file_size ON files(file_size);
 CREATE INDEX IF NOT EXISTS idx_files_original_name ON files(original_name);
 CREATE INDEX IF NOT EXISTS idx_files_file_type ON files(file_type);
+CREATE INDEX IF NOT EXISTS idx_files_stored_path ON files(stored_path);

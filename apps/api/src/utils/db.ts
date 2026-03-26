@@ -49,6 +49,18 @@ export async function getFileById(
   return result;
 }
 
+export async function getFileByStoredPath(
+  db: D1Database,
+  storedPath: string
+): Promise<FileRecord | null> {
+  const result = await db
+    .prepare('SELECT * FROM files WHERE stored_path = ? LIMIT 1')
+    .bind(storedPath)
+    .first<FileRecord>();
+
+  return result;
+}
+
 export async function updateFile(
   db: D1Database,
   id: string,
