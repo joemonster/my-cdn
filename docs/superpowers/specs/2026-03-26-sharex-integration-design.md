@@ -37,6 +37,8 @@ view_url: string;
 
 This field is always present (non-nullable) since every file has a `stored_path`.
 
+**Important:** `view_url` must be added to the base response object (outside the `if (includeDetails)` block) so it's always returned, including in the upload response.
+
 ---
 
 ## 2. Public Preview Page: `GET /view/{YYYYMM}/{hash}.{ext}`
@@ -83,12 +85,18 @@ Minimal, self-contained HTML (no external dependencies). Dark theme.
 **Head:**
 - OpenGraph meta tags for rich embeds (Discord, Slack, Twitter/X):
   - `og:title` — original filename
+  - `og:description` — file size and type (e.g. "PNG image — 1.2 MB")
   - `og:image` — direct file URL (for images)
+  - `og:image:width` / `og:image:height` — from DB if available
   - `og:video` — direct file URL (for videos)
+  - `og:video:type` — MIME type (e.g. `video/mp4`)
+  - `og:video:width` / `og:video:height` — from DB if available
   - `og:type` — `website`
   - `og:url` — the view page URL
-  - `twitter:card` — `summary_large_image`
+  - `twitter:card` — `summary_large_image` for images, `player` for videos
 - Proper `<title>` with filename
+- Response header: `Content-Type: text/html; charset=utf-8`
+- Cache: `Cache-Control: public, max-age=3600` (1 hour — short TTL since file could be deleted)
 
 **Body:**
 - Centered layout, max-width container
@@ -115,7 +123,7 @@ Minimal, self-contained HTML (no external dependencies). Dark theme.
 {
   "Version": "16.1.0",
   "Name": "My CDN",
-  "DestinationType": "ImageUploader, FileUploader",
+  "DestinationType": "ImageUploader",
   "RequestMethod": "POST",
   "RequestURL": "https://YOUR_API_URL/api/upload",
   "Headers": {
