@@ -65,6 +65,7 @@ export default function DashboardPage() {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedFilesMap, setSelectedFilesMap] = useState<Map<string, FileData>>(new Map());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
 
@@ -135,7 +136,6 @@ export default function DashboardPage() {
   // Handle pagination
   const handlePageChange = (page: number) => {
     setPagination((p) => ({ ...p, page }));
-    setSelectedIds(new Set());
   };
 
   // Handle type filter
@@ -163,21 +163,52 @@ export default function DashboardPage() {
       }
       return next;
     });
+    setSelectedFilesMap((prev) => {
+      const next = new Map(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        const file = files.find((f) => f.id === id);
+        if (file) next.set(id, file);
+      }
+      return next;
+    });
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === files.length) {
-      setSelectedIds(new Set());
+    if (allVisibleSelected) {
+      // Deselect only visible files
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        files.forEach((f) => next.delete(f.id));
+        return next;
+      });
+      setSelectedFilesMap((prev) => {
+        const next = new Map(prev);
+        files.forEach((f) => next.delete(f.id));
+        return next;
+      });
     } else {
-      setSelectedIds(new Set(files.map((f) => f.id)));
+      // Select all visible files (add to existing selection)
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        files.forEach((f) => next.add(f.id));
+        return next;
+      });
+      setSelectedFilesMap((prev) => {
+        const next = new Map(prev);
+        files.forEach((f) => next.set(f.id, f));
+        return next;
+      });
     }
   };
 
   const handleClearSelection = () => {
     setSelectedIds(new Set());
+    setSelectedFilesMap(new Map());
   };
 
-  const allSelected = files.length > 0 && selectedIds.size === files.length;
+  const allVisibleSelected = files.length > 0 && files.every((f) => selectedIds.has(f.id));
 
   // Bulk delete
   const handleBulkDelete = async () => {
@@ -198,6 +229,7 @@ export default function DashboardPage() {
 
     setIsBulkDeleting(false);
     setSelectedIds(new Set());
+    setSelectedFilesMap(new Map());
 
     if (failed === 0) {
       toast.success(`Usunięto ${deleted} plików`);
@@ -212,7 +244,7 @@ export default function DashboardPage() {
   const handleBulkDownload = async () => {
     setIsBulkDownloading(true);
     const zip = new JSZip();
-    const selectedFiles = files.filter((f) => selectedIds.has(f.id));
+    const selectedFiles = Array.from(selectedFilesMap.values());
     let downloaded = 0;
 
     try {
@@ -432,7 +464,7 @@ export default function DashboardPage() {
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onSelectAll={handleSelectAll}
-            allSelected={allSelected}
+            allSelected={allVisibleSelected}
             onSort={handleSort}
             onPreview={setPreviewFile}
             onRefresh={fetchFiles}
@@ -444,7 +476,7 @@ export default function DashboardPage() {
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onSelectAll={handleSelectAll}
-            allSelected={allSelected}
+            allSelected={allVisibleSelected}
             onPreview={setPreviewFile}
             onRefresh={fetchFiles}
           />
