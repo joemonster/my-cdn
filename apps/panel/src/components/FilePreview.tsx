@@ -1,20 +1,91 @@
 'use client';
 
-import { X, Download, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
-import { useState } from 'react';
+import { X, Download, ExternalLink, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { FileData, formatFileSize, formatDate } from '@/lib/api';
+
+const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+
+function fitZoomStep(imgWidth: number, imgHeight: number, containerWidth: number, containerHeight: number): number {
+  for (let i = ZOOM_STEPS.length - 1; i >= 0; i--) {
+    const step = ZOOM_STEPS[i];
+    if (imgWidth * step <= containerWidth && imgHeight * step <= containerHeight) {
+      return step;
+    }
+  }
+  return ZOOM_STEPS[0];
+}
 
 interface FilePreviewProps {
   file: FileData;
+  files: FileData[];
   onClose: () => void;
+  onNavigate: (file: FileData) => void;
 }
 
-export function FilePreview({ file, onClose }: FilePreviewProps) {
+export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewProps) {
   const [zoom, setZoom] = useState(1);
+  const [initialZoom, setInitialZoom] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isImage = file.file_type === 'image';
 
-  const handleZoomIn = () => setZoom((z) => Math.min(z + 0.25, 3));
-  const handleZoomOut = () => setZoom((z) => Math.max(z - 0.25, 0.5));
+  const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
+
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const container = containerRef.current;
+    if (!container) return;
+    setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+    const padding = 32;
+    const cw = container.clientWidth - padding;
+    const ch = container.clientHeight - padding;
+    const fit = fitZoomStep(img.naturalWidth, img.naturalHeight, cw, ch);
+    setZoom(fit);
+    setInitialZoom(fit < 1 ? fit : null);
+  }, []);
+
+  const handleZoomIn = () => {
+    setZoom((z) => {
+      const next = ZOOM_STEPS.find((s) => s > z);
+      return next ?? ZOOM_STEPS[ZOOM_STEPS.length - 1];
+    });
+  };
+  const handleZoomOut = () => {
+    setZoom((z) => {
+      const prev = [...ZOOM_STEPS].reverse().find((s) => s < z);
+      return prev ?? ZOOM_STEPS[0];
+    });
+  };
+
+  const currentIndex = files.findIndex((f) => f.id === file.id);
+  const hasPrev = currentIndex > 0;
+  const hasNext = currentIndex < files.length - 1;
+
+  const handlePrev = useCallback(() => {
+    if (hasPrev) {
+      setNaturalSize(null);
+      setInitialZoom(null);
+      onNavigate(files[currentIndex - 1]);
+    }
+  }, [hasPrev, currentIndex, files, onNavigate]);
+
+  const handleNext = useCallback(() => {
+    if (hasNext) {
+      setNaturalSize(null);
+      setInitialZoom(null);
+      onNavigate(files[currentIndex + 1]);
+    }
+  }, [hasNext, currentIndex, files, onNavigate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePrev, handleNext, onClose]);
 
   return (
     <div
@@ -49,7 +120,9 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
                 >
                   <ZoomOut className="w-4 h-4 text-gray-400" />
                 </button>
-                <span className="font-mono text-sm text-gray-400 min-w-[60px] text-center">
+                <span className={`font-mono text-sm min-w-[60px] text-center ${
+                  initialZoom !== null && zoom < 1 ? 'text-amber-400' : 'text-gray-400'
+                }`}>
                   {Math.round(zoom * 100)}%
                 </span>
                 <button
@@ -90,14 +163,30 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         </div>
 
         {/* Preview Content */}
-        <div className="flex-1 overflow-auto p-4 flex items-center justify-center min-h-[400px]">
+        <div ref={containerRef} className="flex-1 overflow-auto p-4 flex items-center justify-center min-h-[400px] relative">
+          {hasPrev && (
+            <button
+              onClick={handlePrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full
+                         bg-dark-700/80 hover:bg-dark-600 text-gray-400 hover:text-white transition-colors"
+              title="Previous file"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
           {isImage ? (
-            <div className="overflow-auto max-w-full max-h-full">
+            <div className="overflow-auto flex items-center justify-center" style={{ maxWidth: '100%', maxHeight: '100%' }}>
               <img
                 src={file.url}
                 alt={file.original_name}
-                style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-                className="max-w-none transition-transform duration-200"
+                onLoad={handleImageLoad}
+                style={naturalSize ? {
+                  width: naturalSize.w * zoom,
+                  minWidth: naturalSize.w * zoom,
+                  height: 'auto',
+                } : undefined}
+                className="transition-all duration-200"
               />
             </div>
           ) : (
@@ -109,6 +198,17 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
             >
               Your browser does not support the video tag.
             </video>
+          )}
+
+          {hasNext && (
+            <button
+              onClick={handleNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full
+                         bg-dark-700/80 hover:bg-dark-600 text-gray-400 hover:text-white transition-colors"
+              title="Next file"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
           )}
         </div>
 
