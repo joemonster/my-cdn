@@ -1,0 +1,20 @@
+{
+  "Version": "16.1.0",
+  "Name": "My CDN",
+  "DestinationType": "ImageUploader",
+  "RequestMethod": "POST",
+  "RequestURL": "https://YOUR_CDN_URL/api/upload",
+  "Headers": {
+    "Authorization": "Bearer YOUR_API_KEY"
+  },
+  "Body": "MultipartFormData",
+  "FileFormName": "file",
+  "Arguments": {
+    "prefix": "shx",
+    "bucket": "sharex"
+  },
+  "URL": "$json:file.view_url$",
+  "ThumbnailURL": "$json:file.thumbnail_url$",
+  "DeletionURL": "",
+  "ErrorMessage": "$json:error$"
+}
