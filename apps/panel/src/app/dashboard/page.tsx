@@ -8,10 +8,11 @@ import {
   RefreshCw,
   LogOut,
   CloudUpload,
-  Filter,
   ImageIcon,
   Video,
-  LayoutGrid,
+  Layers,
+  List,
+  Grid3X3,
   Loader2,
   HelpCircle,
 } from 'lucide-react';
@@ -21,6 +22,9 @@ import { UploadModal } from '@/components/UploadModal';
 import { FilePreview } from '@/components/FilePreview';
 import { Pagination } from '@/components/Pagination';
 import { ApiDocsModal } from '@/components/ApiDocsModal';
+import { FileGrid } from '@/components/FileGrid';
+import { BulkActionsBar } from '@/components/BulkActionsBar';
+import JSZip from 'jszip';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
@@ -51,6 +55,19 @@ export default function DashboardPage() {
   const [showApiDocs, setShowApiDocs] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileData | null>(null);
 
+  // View mode
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('cdn_view_mode') as 'list' | 'grid') || 'list';
+    }
+    return 'list';
+  });
+
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+
   // Check authentication
   useEffect(() => {
     if (!api.isAuthenticated()) {
@@ -64,6 +81,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchDebounced(search);
+      setSelectedIds(new Set());
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -98,6 +116,11 @@ export default function DashboardPage() {
     }
   }, [fetchFiles, checkingAuth]);
 
+  // Persist view mode
+  useEffect(() => {
+    localStorage.setItem('cdn_view_mode', viewMode);
+  }, [viewMode]);
+
   // Handle sorting
   const handleSort = (field: SortField) => {
     if (sort === field) {
@@ -112,12 +135,14 @@ export default function DashboardPage() {
   // Handle pagination
   const handlePageChange = (page: number) => {
     setPagination((p) => ({ ...p, page }));
+    setSelectedIds(new Set());
   };
 
   // Handle type filter
   const handleTypeFilter = (type: FileTypeFilter) => {
     setTypeFilter(type);
     setPagination((p) => ({ ...p, page: 1 }));
+    setSelectedIds(new Set());
   };
 
   // Handle logout
@@ -125,6 +150,103 @@ export default function DashboardPage() {
     api.logout();
     router.replace('/');
     toast.success('Logged out');
+  };
+
+  // Selection handlers
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === files.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(files.map((f) => f.id)));
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const allSelected = files.length > 0 && selectedIds.size === files.length;
+
+  // Bulk delete
+  const handleBulkDelete = async () => {
+    if (!confirm(`Czy na pewno chcesz usunąć ${selectedIds.size} plików?`)) return;
+
+    setIsBulkDeleting(true);
+    let deleted = 0;
+    let failed = 0;
+
+    for (const id of Array.from(selectedIds)) {
+      try {
+        await api.deleteFile(id);
+        deleted++;
+      } catch {
+        failed++;
+      }
+    }
+
+    setIsBulkDeleting(false);
+    setSelectedIds(new Set());
+
+    if (failed === 0) {
+      toast.success(`Usunięto ${deleted} plików`);
+    } else {
+      toast.error(`Usunięto ${deleted}, błędów: ${failed}`);
+    }
+
+    fetchFiles();
+  };
+
+  // Bulk download ZIP
+  const handleBulkDownload = async () => {
+    setIsBulkDownloading(true);
+    const zip = new JSZip();
+    const selectedFiles = files.filter((f) => selectedIds.has(f.id));
+    let downloaded = 0;
+
+    try {
+      for (const file of selectedFiles) {
+        try {
+          const response = await fetch(file.url);
+          const blob = await response.blob();
+          zip.file(file.original_name, blob);
+          downloaded++;
+        } catch {
+          // Skip failed files
+        }
+      }
+
+      if (downloaded === 0) {
+        toast.error('Nie udało się pobrać żadnego pliku');
+        setIsBulkDownloading(false);
+        return;
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'my-cdn-files.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success(`Pobrano ${downloaded} plików w ZIP`);
+    } catch {
+      toast.error('Błąd podczas tworzenia ZIP');
+    } finally {
+      setIsBulkDownloading(false);
+    }
   };
 
   if (checkingAuth) {
@@ -187,72 +309,105 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search files..."
-              className="w-full pl-11 pr-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl
-                       text-white placeholder-gray-500 font-mono text-sm
-                       focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/30
-                       transition-all duration-200"
-            />
-          </div>
-
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            {/* Type Filter */}
-            <div className="flex items-center bg-dark-700 rounded-xl border border-dark-600 p-1">
-              <button
-                onClick={() => handleTypeFilter('all')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
-                  ${typeFilter === 'all'
-                    ? 'bg-dark-500 text-white'
-                    : 'text-gray-400 hover:text-white'}`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-                <span className="hidden sm:inline">All</span>
-              </button>
-              <button
-                onClick={() => handleTypeFilter('image')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
-                  ${typeFilter === 'image'
-                    ? 'bg-neon-cyan/20 text-neon-cyan'
-                    : 'text-gray-400 hover:text-white'}`}
-              >
-                <ImageIcon className="w-4 h-4" />
-                <span className="hidden sm:inline">Images</span>
-              </button>
-              <button
-                onClick={() => handleTypeFilter('video')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
-                  ${typeFilter === 'video'
-                    ? 'bg-neon-purple/20 text-neon-purple'
-                    : 'text-gray-400 hover:text-white'}`}
-              >
-                <Video className="w-4 h-4" />
-                <span className="hidden sm:inline">Videos</span>
-              </button>
+        {/* Toolbar / Bulk Actions */}
+        {selectedIds.size > 0 ? (
+          <BulkActionsBar
+            selectedCount={selectedIds.size}
+            onClearSelection={handleClearSelection}
+            onBulkDelete={handleBulkDelete}
+            onBulkDownload={handleBulkDownload}
+            isDeleting={isBulkDeleting}
+            isDownloading={isBulkDownloading}
+          />
+        ) : (
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search files..."
+                className="w-full pl-11 pr-4 py-2.5 bg-dark-700 border border-dark-600 rounded-xl
+                         text-white placeholder-gray-500 font-mono text-sm
+                         focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan/30
+                         transition-all duration-200"
+              />
             </div>
 
-            {/* Refresh */}
-            <button
-              onClick={fetchFiles}
-              disabled={loading}
-              className="p-2.5 rounded-xl bg-dark-700 border border-dark-600 text-gray-400
-                       hover:text-neon-cyan hover:border-neon-cyan/30 transition-all duration-200
-                       disabled:opacity-50"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+            {/* Filters & View Toggle */}
+            <div className="flex items-center gap-2">
+              {/* Type Filter */}
+              <div className="flex items-center bg-dark-700 rounded-xl border border-dark-600 p-1">
+                <button
+                  onClick={() => handleTypeFilter('all')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
+                    ${typeFilter === 'all'
+                      ? 'bg-dark-500 text-white'
+                      : 'text-gray-400 hover:text-white'}`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span className="hidden sm:inline">All</span>
+                </button>
+                <button
+                  onClick={() => handleTypeFilter('image')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
+                    ${typeFilter === 'image'
+                      ? 'bg-neon-cyan/20 text-neon-cyan'
+                      : 'text-gray-400 hover:text-white'}`}
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Images</span>
+                </button>
+                <button
+                  onClick={() => handleTypeFilter('video')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all
+                    ${typeFilter === 'video'
+                      ? 'bg-neon-purple/20 text-neon-purple'
+                      : 'text-gray-400 hover:text-white'}`}
+                >
+                  <Video className="w-4 h-4" />
+                  <span className="hidden sm:inline">Videos</span>
+                </button>
+              </div>
+
+              {/* View Toggle */}
+              <div className="flex items-center bg-dark-700 rounded-xl border border-dark-600 p-1">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    viewMode === 'list' ? 'bg-dark-500 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                  title="List view"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded-lg transition-all ${
+                    viewMode === 'grid' ? 'bg-dark-500 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                  title="Grid view"
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Refresh */}
+              <button
+                onClick={fetchFiles}
+                disabled={loading}
+                className="p-2.5 rounded-xl bg-dark-700 border border-dark-600 text-gray-400
+                         hover:text-neon-cyan hover:border-neon-cyan/30 transition-all duration-200
+                         disabled:opacity-50"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Stats Bar */}
         <div className="flex items-center justify-between mb-4 text-sm">
@@ -267,16 +422,33 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* File Table */}
-        <FileTable
-          files={files}
-          loading={loading}
-          sort={sort}
-          order={order}
-          onSort={handleSort}
-          onPreview={setPreviewFile}
-          onRefresh={fetchFiles}
-        />
+        {/* File List / Grid */}
+        {viewMode === 'list' ? (
+          <FileTable
+            files={files}
+            loading={loading}
+            sort={sort}
+            order={order}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
+            allSelected={allSelected}
+            onSort={handleSort}
+            onPreview={setPreviewFile}
+            onRefresh={fetchFiles}
+          />
+        ) : (
+          <FileGrid
+            files={files}
+            loading={loading}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
+            allSelected={allSelected}
+            onPreview={setPreviewFile}
+            onRefresh={fetchFiles}
+          />
+        )}
 
         {/* Pagination */}
         {pagination.total_pages > 1 && (
@@ -302,7 +474,12 @@ export default function DashboardPage() {
 
       {/* Preview Modal */}
       {previewFile && (
-        <FilePreview file={previewFile} onClose={() => setPreviewFile(null)} />
+        <FilePreview
+          file={previewFile}
+          files={files}
+          onClose={() => setPreviewFile(null)}
+          onNavigate={setPreviewFile}
+        />
       )}
 
       {/* API Docs Modal */}
