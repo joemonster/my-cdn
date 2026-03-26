@@ -3,6 +3,7 @@ import { validateApiKey, validateAdminCredentials } from './middleware/auth';
 import { handleUpload } from './routes/upload';
 import { handleGetFiles } from './routes/files';
 import { handleGetFile, handleUpdateFile, handleDeleteFile } from './routes/file';
+import { handleViewPage } from './routes/view';
 import { handleAiGenerate, cleanupExpiredImages } from './routes/aigenerate';
 import { getFromR2 } from './utils/storage';
 import { jsonResponse, errorResponse, successResponse } from './utils/response';
@@ -32,6 +33,8 @@ export default {
 
       if (path.match(/^\/\d{6}\/[\w-]+\.\w+$/)) {
         response = await handleFileServing(env, path);
+      } else if (path.match(/^\/view\/\d{6}\/[\w-]+\.\w+$/)) {
+        response = await handleViewPage(env, path);
       } else if (path.match(/^\/ai-gen\/\d{4}-\d{2}-\d{2}\/[\w-]+\.png$/)) {
         response = await handleAiGenFileServing(env, path);
       } else if (path.startsWith('/api/')) {
