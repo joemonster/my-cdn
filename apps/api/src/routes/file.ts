@@ -1,6 +1,6 @@
 import { Env } from '../types';
 import { getFileById, updateFile, deleteFile, fileRecordToResponse } from '../utils/db';
-import { deleteFromR2 } from '../utils/storage';
+import { deleteFromR2, uploadToR2 } from '../utils/storage';
 import { errorResponse, successResponse } from '../utils/response';
 
 export async function handleGetFile(
@@ -39,7 +39,7 @@ export async function handleUpdateFile(
       return errorResponse('File not found', 404);
     }
 
-    let body: { original_name?: string };
+    let body: { original_name?: string; thumbnail?: string };
     try {
       body = await request.json();
     } catch {
@@ -52,8 +52,26 @@ export async function handleUpdateFile(
       }
     }
 
+    let thumbnailPath: string | undefined;
+    if (body.thumbnail) {
+      try {
+        const base64Data = body.thumbnail.replace(/^data:image\/\w+;base64,/, '');
+        const thumbnailBuffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+
+        const hash = existingFile.stored_path.split('/').pop()?.split('.')[0] || fileId;
+        const yearMonth = existingFile.stored_path.split('/')[0];
+        thumbnailPath = `${yearMonth}/${hash}_thumb.jpg`;
+
+        await uploadToR2(env.BUCKET, thumbnailPath, thumbnailBuffer.buffer, 'image/jpeg');
+      } catch (error) {
+        console.error('Thumbnail upload error:', error);
+        return errorResponse('Failed to process thumbnail', 400);
+      }
+    }
+
     const updatedFile = await updateFile(env.DB, fileId, {
       original_name: body.original_name,
+      thumbnail_path: thumbnailPath,
     });
 
     if (!updatedFile) {

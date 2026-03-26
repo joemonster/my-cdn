@@ -64,14 +64,30 @@ export async function getFileByStoredPath(
 export async function updateFile(
   db: D1Database,
   id: string,
-  updates: Partial<Pick<FileRecord, 'original_name'>>
+  updates: Partial<Pick<FileRecord, 'original_name' | 'thumbnail_path'>>
 ): Promise<FileRecord | null> {
   const now = new Date().toISOString();
+  const setClauses: string[] = [];
+  const bindings: (string | null)[] = [];
 
   if (updates.original_name !== undefined) {
+    setClauses.push('original_name = ?');
+    bindings.push(updates.original_name);
+  }
+
+  if (updates.thumbnail_path !== undefined) {
+    setClauses.push('thumbnail_path = ?');
+    bindings.push(updates.thumbnail_path);
+  }
+
+  if (setClauses.length > 0) {
+    setClauses.push('updated_at = ?');
+    bindings.push(now);
+    bindings.push(id);
+
     await db
-      .prepare('UPDATE files SET original_name = ?, updated_at = ? WHERE id = ?')
-      .bind(updates.original_name, now, id)
+      .prepare(`UPDATE files SET ${setClauses.join(', ')} WHERE id = ?`)
+      .bind(...bindings)
       .run();
   }
 
