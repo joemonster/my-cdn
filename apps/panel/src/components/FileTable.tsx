@@ -23,6 +23,10 @@ interface FileTableProps {
   loading: boolean;
   sort: SortField;
   order: SortOrder;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onSelectAll: () => void;
+  allSelected: boolean;
   onSort: (field: SortField) => void;
   onPreview: (file: FileData) => void;
   onRefresh: () => void;
@@ -33,6 +37,10 @@ export function FileTable({
   loading,
   sort,
   order,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
+  allSelected,
   onSort,
   onPreview,
   onRefresh,
@@ -155,8 +163,17 @@ export function FileTable({
   return (
     <div className="bg-dark-800 rounded-xl border border-dark-600 overflow-visible">
       {/* Table Header */}
-      <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_100px_100px_150px_80px] gap-4 p-4
+      <div className="hidden md:grid md:grid-cols-[40px_80px_1fr_100px_100px_100px_150px_80px] gap-4 p-4
                      bg-dark-700 border-b border-dark-600 rounded-t-xl">
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={onSelectAll}
+            className="w-4 h-4 rounded border-dark-500 bg-dark-600 text-neon-cyan
+                       focus:ring-neon-cyan/30 focus:ring-offset-0 cursor-pointer accent-[#00FFD1]"
+          />
+        </div>
         <span className="text-xs uppercase tracking-wide text-gray-500">Preview</span>
         <SortHeader field="original_name">Name</SortHeader>
         <span className="text-xs uppercase tracking-wide text-gray-500">Bucket</span>
@@ -171,9 +188,20 @@ export function FileTable({
         {files.map((file) => (
           <div
             key={file.id}
-            className="grid grid-cols-1 md:grid-cols-[80px_1fr_100px_100px_100px_150px_80px] gap-4 p-4
+            className="grid grid-cols-1 md:grid-cols-[40px_80px_1fr_100px_100px_100px_150px_80px] gap-4 p-4
                        hover:bg-dark-700/50 transition-colors group"
           >
+            {/* Checkbox */}
+            <div className="hidden md:flex items-center">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(file.id)}
+                onChange={() => onToggleSelect(file.id)}
+                className="w-4 h-4 rounded border-dark-500 bg-dark-600 text-neon-cyan
+                           focus:ring-neon-cyan/30 focus:ring-offset-0 cursor-pointer accent-[#00FFD1]"
+              />
+            </div>
+
             {/* Preview Thumbnail */}
             <div
               onClick={() => onPreview(file)}
