@@ -8,7 +8,9 @@ Enable ShareX as an image/video upload destination for my-cdn, with two URL opti
 
 1. Add `view_url` field to upload API response
 2. Create public preview page endpoint (`GET /view/{stored_path}`)
-3. Provide ShareX Custom Uploader config file (`.sxcu`)
+3. Server-side thumbnail generation for uploads without client thumbnail
+4. Add DB index on `stored_path`
+5. Provide ShareX Custom Uploader config file (`.sxcu`)
 
 ## Out of Scope
 
@@ -20,14 +22,6 @@ Enable ShareX as an image/video upload destination for my-cdn, with two URL opti
 
 ## 1. New `view_url` Field in API Response
 
-**File:** `apps/api/src/utils/db.ts` — `fileRecordToResponse()`
-
-Add `view_url` to `FileResponse` type and to the response builder:
-
-```ts
-view_url: `${cdnBaseUrl}/view/${file.stored_path}`
-```
-
 **File:** `apps/api/src/types.ts` — `FileResponse` interface
 
 Add:
@@ -35,9 +29,14 @@ Add:
 view_url: string;
 ```
 
-This field is always present (non-nullable) since every file has a `stored_path`.
+**File:** `apps/api/src/utils/db.ts` — `fileRecordToResponse()`
 
-**Important:** `view_url` must be added to the base response object (outside the `if (includeDetails)` block) so it's always returned, including in the upload response.
+Add `view_url` to the **base** response object (outside `if (includeDetails)` block):
+```ts
+view_url: `${cdnBaseUrl}/view/${file.stored_path}`
+```
+
+Always present (non-nullable) since every file has a `stored_path`.
 
 ---
 
@@ -52,7 +51,9 @@ Add route pattern before the `/api/` check:
 path.match(/^\/view\/\d{6}\/[\w-]+\.\w+$/)
 ```
 
-No authentication required — this is a public page.
+No authentication required — public page.
+
+Note: regex `[\w-]+` handles the `shx-` prefix (e.g. `/view/202603/shx-a1b2c3d4.png`).
 
 ### Handler
 
@@ -60,11 +61,15 @@ No authentication required — this is a public page.
 
 Workflow:
 1. Extract `stored_path` from URL (strip `/view/` prefix)
-2. Query DB: `getFileByStoredPath(db, storedPath)` — new function in `db.ts`
+2. Query DB: `getFileByStoredPath(db, storedPath)`
 3. If not found → 404 HTML page
 4. Render HTML page with file info
 
-### DB Function
+Response headers:
+- `Content-Type: text/html; charset=utf-8`
+- `Cache-Control: public, max-age=3600` (1 hour — file could be deleted)
+
+### DB Changes
 
 **File:** `apps/api/src/utils/db.ts`
 
@@ -76,48 +81,89 @@ export async function getFileByStoredPath(
 ): Promise<FileRecord | null>
 ```
 
-Query: `SELECT * FROM files WHERE stored_path = ?`
+Query: `SELECT * FROM files WHERE stored_path = ? LIMIT 1`
+
+**File:** `apps/api/schema.sql` — add index:
+```sql
+CREATE INDEX IF NOT EXISTS idx_files_stored_path ON files(stored_path);
+```
+
+Also run this as a D1 migration to apply to existing database.
 
 ### HTML Page Content
 
 Minimal, self-contained HTML (no external dependencies). Dark theme.
 
-**Head:**
-- OpenGraph meta tags for rich embeds (Discord, Slack, Twitter/X):
-  - `og:title` — original filename
-  - `og:description` — file size and type (e.g. "PNG image — 1.2 MB")
-  - `og:image` — direct file URL (for images)
-  - `og:image:width` / `og:image:height` — from DB if available
-  - `og:video` — direct file URL (for videos)
+**Head / OpenGraph meta tags:**
+- `og:title` — original filename
+- `og:site_name` — "My CDN"
+- `og:description` — file type and size (e.g. "PNG image — 1.2 MB")
+- `og:url` — the view page URL
+- `og:type` — `website`
+- For images:
+  - `og:image` — direct file URL
+  - `og:image:width` / `og:image:height` — from DB (omit if null)
+  - `twitter:card` — `summary_large_image`
+- For videos:
+  - `og:video` — direct file URL
   - `og:video:type` — MIME type (e.g. `video/mp4`)
-  - `og:video:width` / `og:video:height` — from DB if available
-  - `og:type` — `website`
-  - `og:url` — the view page URL
-  - `twitter:card` — `summary_large_image` for images, `player` for videos
-- Proper `<title>` with filename
-- Response header: `Content-Type: text/html; charset=utf-8`
-- Cache: `Cache-Control: public, max-age=3600` (1 hour — short TTL since file could be deleted)
+  - `og:video:width` / `og:video:height` — from DB (omit if null)
+  - `twitter:card` — `player`
+- `<title>` — filename
 
 **Body:**
 - Centered layout, max-width container
-- Image: `<img>` tag with direct URL, max-width 100%
-- Video: `<video>` tag with controls, direct URL
-- Metadata below: original name, file size (human-readable), upload date
+- Image: `<img>` with direct URL, max-width 100%, rounded corners
+- Video: `<video>` with controls, direct URL
+- Metadata: original name, file size (human-readable), upload date
 - "Open original" link to direct file URL
-- Minimal footer with CDN name
+- Minimal footer: "My CDN"
 
 **Style:**
-- Dark background (`#1a1a2e` or similar)
-- Light text
-- Rounded corners on media
+- Dark background (`#1a1a2e` or similar), light text
+- Rounded corners on media, responsive
 - No external fonts or CSS frameworks
-- Responsive
 
 ---
 
-## 3. ShareX Custom Uploader Config
+## 3. Server-Side Thumbnail Generation
 
-**New file:** `sharex-uploader.sxcu` (repo root)
+ShareX does not send a client-generated thumbnail like the panel does. The API should generate thumbnails server-side when the `thumbnail` field is missing from the upload.
+
+**Approach: Cloudflare Image Resizing via `fetch()` with `cf.image` options.**
+
+After uploading the original image to R2, if no `thumbnail` was provided and the file is an image:
+
+1. Fetch the just-uploaded image back from its public CDN URL
+2. Apply Cloudflare Image Resizing via `cf.image`:
+   ```ts
+   const resized = await fetch(`${cdnBaseUrl}/${storedPath}`, {
+     cf: {
+       image: {
+         width: 300,
+         height: 300,
+         fit: 'inside',
+         format: 'jpeg',
+         quality: 75,
+       },
+     },
+   });
+   ```
+3. Upload the resized response body to R2 at the thumbnail path (`{YYYYMM}/{hash}_thumb.jpg`)
+
+**File:** `apps/api/src/routes/upload.ts` — after the existing thumbnail handling block, add an `else if` for server-side generation.
+
+**Requirements:**
+- Cloudflare Image Resizing must be enabled (requires custom domain, not `workers.dev`). If not available, thumbnail generation silently skips (same as current behavior when panel doesn't send one).
+- Only for images (not videos — video thumbnail extraction is not feasible in Workers).
+
+**Fallback:** If the `cf.image` fetch fails (e.g. Image Resizing not enabled), catch the error and continue without thumbnail. Log a warning.
+
+---
+
+## 4. ShareX Custom Uploader Config
+
+**New file:** `sharex-uploader.sxcu` (repo root, added to `.gitignore`)
 
 ```json
 {
@@ -125,12 +171,16 @@ Minimal, self-contained HTML (no external dependencies). Dark theme.
   "Name": "My CDN",
   "DestinationType": "ImageUploader",
   "RequestMethod": "POST",
-  "RequestURL": "https://YOUR_API_URL/api/upload",
+  "RequestURL": "https://my-cdn-api.literalnie.workers.dev/api/upload",
   "Headers": {
-    "Authorization": "Bearer YOUR_API_KEY"
+    "Authorization": "Bearer 22d-49f5-af40-c98"
   },
   "Body": "MultipartFormData",
   "FileFormName": "file",
+  "Arguments": {
+    "prefix": "shx",
+    "bucket": "sharex"
+  },
   "URL": "$json:file.view_url$",
   "ThumbnailURL": "$json:file.thumbnail_url$",
   "DeletionURL": "",
@@ -138,13 +188,17 @@ Minimal, self-contained HTML (no external dependencies). Dark theme.
 }
 ```
 
-User replaces `YOUR_API_URL` and `YOUR_API_KEY` with their values. Double-clicking the `.sxcu` file imports it into ShareX.
+**Template file (committed):** `sharex-uploader.sxcu.template` — same but with placeholder credentials:
+```json
+"RequestURL": "https://YOUR_CDN_URL/api/upload",
+"Authorization": "Bearer YOUR_API_KEY"
+```
+
+**`.gitignore`:** Add `sharex-uploader.sxcu` (actual file with secrets stays local).
 
 ---
 
-## 4. Routing Summary (index.ts)
-
-Current routes + new route:
+## 5. Routing Summary (index.ts)
 
 | Pattern | Auth | Handler |
 |---------|------|---------|
@@ -164,12 +218,24 @@ Current routes + new route:
 | `apps/api/src/types.ts` | Add `view_url` to `FileResponse` |
 | `apps/api/src/utils/db.ts` | Add `getFileByStoredPath()`, add `view_url` to `fileRecordToResponse()` |
 | `apps/api/src/routes/view.ts` | **New** — preview page handler |
+| `apps/api/src/routes/upload.ts` | Add server-side thumbnail generation fallback |
 | `apps/api/src/index.ts` | Add `/view/` route |
-| `sharex-uploader.sxcu` | **New** — ShareX config file |
+| `apps/api/schema.sql` | Add index on `stored_path` |
+| `sharex-uploader.sxcu` | **New** — ShareX config (gitignored) |
+| `sharex-uploader.sxcu.template` | **New** — template with placeholders (committed) |
+| `.gitignore` | Add `sharex-uploader.sxcu` |
+
+## Known Limitations
+
+- **No thumbnails for videos from ShareX** — video frame extraction is not feasible in CF Workers. Videos uploaded via ShareX will have `thumbnail_url: null`.
+- **`width`/`height` null from ShareX** — the upload endpoint does not extract image dimensions server-side. OG dimension tags will be omitted for ShareX uploads. Panel-uploaded files will have dimensions if the panel sends them.
+- **Image Resizing availability** — thumbnail generation requires Cloudflare Image Resizing (custom domain). On `workers.dev` domain, thumbnails will silently not be generated.
 
 ## Testing
 
 - Upload a file via API, verify `view_url` is in response
-- Visit `view_url` in browser — see preview page with metadata
+- Upload via API without `thumbnail` field — verify thumbnail is generated server-side (on custom domain)
+- Visit `view_url` in browser — see preview page with metadata and OG tags
 - Paste `view_url` in Discord — verify OpenGraph embed shows image
 - Import `.sxcu` into ShareX, upload screenshot — verify URL copied to clipboard
+- Verify `sharex-uploader.sxcu` is gitignored, template is committed
