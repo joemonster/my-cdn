@@ -16,8 +16,8 @@ export async function insertFile(
 
   await db
     .prepare(
-      `INSERT INTO files (id, original_name, stored_path, mime_type, file_size, file_type, width, height, duration, thumbnail_path, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO files (id, original_name, stored_path, mime_type, file_size, file_type, width, height, duration, thumbnail_path, bucket, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       file.id,
@@ -30,6 +30,7 @@ export async function insertFile(
       file.height,
       file.duration,
       file.thumbnail_path,
+      file.bucket,
       now,
       now
     )
@@ -142,10 +143,12 @@ export function fileRecordToResponse(
     id: file.id,
     url: `${cdnBaseUrl}/${file.stored_path}`,
     thumbnail_url: file.thumbnail_path ? `${cdnBaseUrl}/${file.thumbnail_path}` : null,
+    view_url: `${cdnBaseUrl}/view/${file.stored_path}`,
     original_name: file.original_name,
     mime_type: file.mime_type,
     file_size: file.file_size,
     file_type: file.file_type,
+    bucket: file.bucket,
     created_at: file.created_at,
   };
 

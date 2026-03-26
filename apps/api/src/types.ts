@@ -19,6 +19,7 @@ export interface FileRecord {
   height: number | null;
   duration: number | null;
   thumbnail_path: string | null;
+  bucket: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +28,7 @@ export interface FileResponse {
   id: string;
   url: string;
   thumbnail_url: string | null;
+  view_url: string;
   original_name: string;
   stored_path?: string;
   mime_type: string;
@@ -35,6 +37,7 @@ export interface FileResponse {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  bucket?: string | null;
   created_at: string;
   updated_at?: string;
 }
