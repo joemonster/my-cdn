@@ -95,7 +95,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
       url: fileResponse.url,
       view_url: fileResponse.view_url,
       thumbnail_url: fileResponse.thumbnail_url,
-    }, 201);
+    });
   } catch (error) {
     console.error('Upload error:', error);
     return errorResponse(
