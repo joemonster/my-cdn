@@ -155,10 +155,11 @@ export function FileTable({
   return (
     <div className="bg-dark-800 rounded-xl border border-dark-600 overflow-visible">
       {/* Table Header */}
-      <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_100px_150px_80px] gap-4 p-4
+      <div className="hidden md:grid md:grid-cols-[80px_1fr_100px_100px_100px_150px_80px] gap-4 p-4
                      bg-dark-700 border-b border-dark-600 rounded-t-xl">
         <span className="text-xs uppercase tracking-wide text-gray-500">Preview</span>
         <SortHeader field="original_name">Name</SortHeader>
+        <span className="text-xs uppercase tracking-wide text-gray-500">Bucket</span>
         <span className="text-xs uppercase tracking-wide text-gray-500">Type</span>
         <SortHeader field="file_size">Size</SortHeader>
         <SortHeader field="created_at">Date</SortHeader>
@@ -170,7 +171,7 @@ export function FileTable({
         {files.map((file) => (
           <div
             key={file.id}
-            className="grid grid-cols-1 md:grid-cols-[80px_1fr_100px_100px_150px_80px] gap-4 p-4
+            className="grid grid-cols-1 md:grid-cols-[80px_1fr_100px_100px_100px_150px_80px] gap-4 p-4
                        hover:bg-dark-700/50 transition-colors group"
           >
             {/* Preview Thumbnail */}
@@ -192,6 +193,38 @@ export function FileTable({
                   alt=""
                   loading="lazy"
                   className="w-full h-full object-cover"
+                  onLoad={async (e) => {
+                    try {
+                      const img = e.currentTarget;
+                      const canvas = document.createElement('canvas');
+                      const MAX_SIZE = 200;
+                      let width = img.naturalWidth;
+                      let height = img.naturalHeight;
+
+                      if (width > height) {
+                        if (width > MAX_SIZE) {
+                          height = Math.round((height * MAX_SIZE) / width);
+                          width = MAX_SIZE;
+                        }
+                      } else {
+                        if (height > MAX_SIZE) {
+                          width = Math.round((width * MAX_SIZE) / height);
+                          height = MAX_SIZE;
+                        }
+                      }
+
+                      canvas.width = width;
+                      canvas.height = height;
+                      const ctx = canvas.getContext('2d');
+                      if (!ctx) return;
+                      ctx.drawImage(img, 0, 0, width, height);
+                      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+
+                      await api.uploadThumbnail(file.id, base64);
+                    } catch {
+                      // Silently fail — thumbnail will be generated on next visit
+                    }
+                  }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
@@ -233,6 +266,17 @@ export function FileTable({
                 <span className="text-sm text-white truncate" title={file.original_name}>
                   {file.original_name}
                 </span>
+              )}
+            </div>
+
+            {/* Bucket */}
+            <div className="flex items-center">
+              {file.bucket ? (
+                <span className="px-2 py-1 rounded text-xs font-mono bg-dark-600 text-gray-300 truncate" title={file.bucket}>
+                  {file.bucket}
+                </span>
+              ) : (
+                <span className="text-xs text-gray-600">—</span>
               )}
             </div>
 

@@ -12,6 +12,7 @@ export interface FileData {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  bucket?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -168,6 +169,13 @@ class ApiClient {
     return this.request<FileResponse>(`/api/file/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ original_name: originalName }),
+    });
+  }
+
+  async uploadThumbnail(id: string, thumbnailBase64: string): Promise<FileResponse> {
+    return this.request<FileResponse>(`/api/file/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ thumbnail: thumbnailBase64 }),
     });
   }
 
