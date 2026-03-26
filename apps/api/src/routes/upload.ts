@@ -22,6 +22,8 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     const thumbnailBase64 = formData.get('thumbnail') as string | null;
+    const prefix = (formData.get('prefix') as string | null)?.trim() || null;
+    const bucket = (formData.get('bucket') as string | null)?.trim() || null;
 
     if (!file) {
       return errorResponse('File is required', 400);
@@ -47,7 +49,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
     const fileData = await file.arrayBuffer();
     const hash = await generateFileHash(fileData);
     const extension = MIME_TO_EXTENSION[mimeType] || 'bin';
-    const storedPath = generateStoragePath(hash, extension);
+    const storedPath = generateStoragePath(hash, extension, prefix || undefined);
 
     await uploadToR2(env.BUCKET, storedPath, fileData, mimeType);
 
@@ -65,9 +67,11 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
 
     const fileId = uuidv4();
 
+    const originalName = prefix ? `${prefix}-${file.name}` : file.name;
+
     await insertFile(env.DB, {
       id: fileId,
-      original_name: file.name,
+      original_name: originalName,
       stored_path: storedPath,
       mime_type: mimeType,
       file_size: file.size,
@@ -76,6 +80,7 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
       height: null,
       duration: null,
       thumbnail_path: thumbnailPath,
+      bucket: bucket,
     });
 
     const insertedFile = await getFileById(env.DB, fileId);
@@ -84,7 +89,13 @@ export async function handleUpload(request: Request, env: Env): Promise<Response
       return errorResponse('Failed to retrieve uploaded file', 500);
     }
 
-    return successResponse({ file: fileRecordToResponse(insertedFile, env.CDN_BASE_URL) }, 201);
+    const fileResponse = fileRecordToResponse(insertedFile, env.CDN_BASE_URL);
+    return successResponse({
+      file: fileResponse,
+      url: fileResponse.url,
+      view_url: fileResponse.view_url,
+      thumbnail_url: fileResponse.thumbnail_url,
+    }, 201);
   } catch (error) {
     console.error('Upload error:', error);
     return errorResponse(
