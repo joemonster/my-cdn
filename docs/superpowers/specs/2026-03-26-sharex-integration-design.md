@@ -126,38 +126,31 @@ Minimal, self-contained HTML (no external dependencies). Dark theme.
 
 ---
 
-## 3. Server-Side Thumbnail Generation
+## 3. Lazy Thumbnail Generation (Panel-Side)
 
-ShareX does not send a client-generated thumbnail like the panel does. The API should generate thumbnails server-side when the `thumbnail` field is missing from the upload.
+ShareX does not send a client-generated thumbnail like the panel does. Instead of server-side generation, the panel will lazily generate thumbnails when it encounters files without one.
 
-**Approach: Cloudflare Image Resizing via `fetch()` with `cf.image` options.**
+**How it already works:** `FileTable.tsx` (lines 190-196) already falls back to displaying the full image when `thumbnail_url` is null. The panel also already has `generateImageThumbnail()` in `api.ts` which uses Canvas API to resize images to 200px.
 
-After uploading the original image to R2, if no `thumbnail` was provided and the file is an image:
+**New behavior:** When the panel loads a full image as thumbnail fallback:
+1. Generate a thumbnail client-side using existing `generateImageThumbnail()` logic (Canvas → base64 JPEG)
+2. Send it to the API via the existing `PATCH /api/file/{id}` endpoint (extended to accept `thumbnail` field)
+3. API uploads the thumbnail to R2 and updates `thumbnail_path` in DB
+4. Next time the panel loads this file, it uses the cached thumbnail
 
-1. Fetch the just-uploaded image back from its public CDN URL
-2. Apply Cloudflare Image Resizing via `cf.image`:
-   ```ts
-   const resized = await fetch(`${cdnBaseUrl}/${storedPath}`, {
-     cf: {
-       image: {
-         width: 300,
-         height: 300,
-         fit: 'inside',
-         format: 'jpeg',
-         quality: 75,
-       },
-     },
-   });
-   ```
-3. Upload the resized response body to R2 at the thumbnail path (`{YYYYMM}/{hash}_thumb.jpg`)
+**API change:** Extend `PATCH /api/file/{id}` to accept optional `thumbnail` (base64 string) in addition to `original_name`.
 
-**File:** `apps/api/src/routes/upload.ts` — after the existing thumbnail handling block, add an `else if` for server-side generation.
+**Files:**
+- `apps/api/src/routes/file.ts` — extend `handleUpdateFile` to handle `thumbnail`
+- `apps/api/src/utils/db.ts` — extend `updateFile` to accept `thumbnail_path`
+- `apps/panel/src/components/FileTable.tsx` — add lazy thumbnail generation logic
+- `apps/panel/src/lib/api.ts` — add `updateFileThumbnail()` method or extend `updateFile()`
 
-**Requirements:**
-- Cloudflare Image Resizing must be enabled (requires custom domain, not `workers.dev`). If not available, thumbnail generation silently skips (same as current behavior when panel doesn't send one).
-- Only for images (not videos — video thumbnail extraction is not feasible in Workers).
-
-**Fallback:** If the `cf.image` fetch fails (e.g. Image Resizing not enabled), catch the error and continue without thumbnail. Log a warning.
+**Advantages over server-side generation:**
+- Zero new dependencies (no WASM, no CF Image Resizing)
+- Reuses existing thumbnail generation code
+- Works on `workers.dev` domain
+- Lazy — only generates when someone views in panel
 
 ---
 
@@ -218,7 +211,9 @@ After uploading the original image to R2, if no `thumbnail` was provided and the
 | `apps/api/src/types.ts` | Add `view_url` to `FileResponse` |
 | `apps/api/src/utils/db.ts` | Add `getFileByStoredPath()`, add `view_url` to `fileRecordToResponse()` |
 | `apps/api/src/routes/view.ts` | **New** — preview page handler |
-| `apps/api/src/routes/upload.ts` | Add server-side thumbnail generation fallback |
+| `apps/api/src/routes/file.ts` | Extend PATCH to accept `thumbnail` |
+| `apps/panel/src/components/FileTable.tsx` | Add lazy thumbnail generation |
+| `apps/panel/src/lib/api.ts` | Add `updateFileThumbnail()` method |
 | `apps/api/src/index.ts` | Add `/view/` route |
 | `apps/api/schema.sql` | Add index on `stored_path` |
 | `sharex-uploader.sxcu` | **New** — ShareX config (gitignored) |
@@ -227,14 +222,14 @@ After uploading the original image to R2, if no `thumbnail` was provided and the
 
 ## Known Limitations
 
-- **No thumbnails for videos from ShareX** — video frame extraction is not feasible in CF Workers. Videos uploaded via ShareX will have `thumbnail_url: null`.
-- **`width`/`height` null from ShareX** — the upload endpoint does not extract image dimensions server-side. OG dimension tags will be omitted for ShareX uploads. Panel-uploaded files will have dimensions if the panel sends them.
-- **Image Resizing availability** — thumbnail generation requires Cloudflare Image Resizing (custom domain). On `workers.dev` domain, thumbnails will silently not be generated.
+- **No thumbnails for videos from ShareX** — video thumbnail extraction requires a `<video>` element (browser). Videos uploaded via ShareX will only get thumbnails if viewed in the panel (which can generate them lazily).
+- **`width`/`height` null from ShareX** — the upload endpoint does not extract image dimensions server-side. OG dimension tags will be omitted for ShareX uploads.
+- **Thumbnails generated on first panel view** — files uploaded via ShareX won't have thumbnails until someone opens the panel and the lazy generation triggers.
 
 ## Testing
 
 - Upload a file via API, verify `view_url` is in response
-- Upload via API without `thumbnail` field — verify thumbnail is generated server-side (on custom domain)
+- Upload via API without `thumbnail` field — open panel, verify thumbnail is generated lazily and persisted
 - Visit `view_url` in browser — see preview page with metadata and OG tags
 - Paste `view_url` in Discord — verify OpenGraph embed shows image
 - Import `.sxcu` into ShareX, upload screenshot — verify URL copied to clipboard
