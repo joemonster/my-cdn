@@ -123,8 +123,6 @@ type ErrorCode =
 
 const MAX_PROMPT_LENGTH = 10000;
 const MAX_N = 4;
-const DEFAULT_ASPECT_RATIO = '4:3';
-
 const ASPECT_RATIO_ALIASES: Record<string, string> = {
   square: '1:1',
   landscape: '16:9',
@@ -142,10 +140,10 @@ const ASPECT_TO_OPENAI_SIZE: Record<string, string> = {
   '9:16': '1024x1536',
 };
 
-function normalizeAspectRatio(input?: string): string {
-  if (!input) return DEFAULT_ASPECT_RATIO;
+function normalizeAspectRatio(input?: string): string | undefined {
+  if (!input) return undefined;
   const normalized = ASPECT_RATIO_ALIASES[input.toLowerCase()] || input;
-  return VALID_ASPECT_RATIOS.has(normalized) ? normalized : DEFAULT_ASPECT_RATIO;
+  return VALID_ASPECT_RATIOS.has(normalized) ? normalized : undefined;
 }
 
 // --- Helpers ---
@@ -189,10 +187,13 @@ async function callImageOnly(
     n,
     ...(!isOpenAI && { response_format: 'b64_json' }),
   };
-  if (isOpenAI) {
-    body.size = ASPECT_TO_OPENAI_SIZE[aspectRatio || DEFAULT_ASPECT_RATIO] || ASPECT_TO_OPENAI_SIZE[DEFAULT_ASPECT_RATIO];
-  } else {
-    body.aspect_ratio = aspectRatio || DEFAULT_ASPECT_RATIO;
+  if (aspectRatio) {
+    if (isOpenAI) {
+      const size = ASPECT_TO_OPENAI_SIZE[aspectRatio];
+      if (size) body.size = size;
+    } else {
+      body.aspect_ratio = aspectRatio;
+    }
   }
   if (model.quality) body.quality = model.quality;
 
