@@ -171,9 +171,9 @@ Generate images using AI models via Vercel AI Gateway.
 - \`imagen\` — Google Imagen 4.0 (image-only)
 - \`flux\` — Flux 2 Pro (image-only)
 - \`flux-schnell\` — Flux Schnell (image-only, fast)
-- \`gpt-image-low\` — OpenAI GPT Image 1, low quality (image-only)
-- \`gpt-image-medium\` — OpenAI GPT Image 1, medium quality (image-only)
-- \`gpt-image-high\` — OpenAI GPT Image 1, high quality (image-only)
+- \`gpt-image-low\` — OpenAI GPT Image 1.5, low quality (image-only)
+- \`gpt-image-medium\` — OpenAI GPT Image 1.5, medium quality (image-only)
+- \`gpt-image-high\` — OpenAI GPT Image 1.5, high quality (image-only)
 - \`recraft\` — Recraft V4 (image-only)
 - \`recraft-pro\` — Recraft V4 Pro (image-only)
 
