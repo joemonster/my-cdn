@@ -123,6 +123,30 @@ type ErrorCode =
 
 const MAX_PROMPT_LENGTH = 10000;
 const MAX_N = 4;
+const DEFAULT_ASPECT_RATIO = '4:3';
+
+const ASPECT_RATIO_ALIASES: Record<string, string> = {
+  square: '1:1',
+  landscape: '16:9',
+  portrait: '9:16',
+};
+
+const VALID_ASPECT_RATIOS = new Set(['1:1', '4:3', '3:4', '16:9', '9:16']);
+
+// OpenAI uses `size` param with pixel dimensions
+const ASPECT_TO_OPENAI_SIZE: Record<string, string> = {
+  '1:1': '1024x1024',
+  '4:3': '1536x1024',
+  '3:4': '1024x1536',
+  '16:9': '1536x1024',
+  '9:16': '1024x1536',
+};
+
+function normalizeAspectRatio(input?: string): string {
+  if (!input) return DEFAULT_ASPECT_RATIO;
+  const normalized = ASPECT_RATIO_ALIASES[input.toLowerCase()] || input;
+  return VALID_ASPECT_RATIOS.has(normalized) ? normalized : DEFAULT_ASPECT_RATIO;
+}
 
 // --- Helpers ---
 
@@ -165,7 +189,11 @@ async function callImageOnly(
     n,
     ...(!isOpenAI && { response_format: 'b64_json' }),
   };
-  if (aspectRatio) body.aspect_ratio = aspectRatio;
+  if (isOpenAI) {
+    body.size = ASPECT_TO_OPENAI_SIZE[aspectRatio || DEFAULT_ASPECT_RATIO] || ASPECT_TO_OPENAI_SIZE[DEFAULT_ASPECT_RATIO];
+  } else {
+    body.aspect_ratio = aspectRatio || DEFAULT_ASPECT_RATIO;
+  }
   if (model.quality) body.quality = model.quality;
 
   const controller = new AbortController();
@@ -498,7 +526,7 @@ export async function handleAiGenerate(request: Request, env: Env): Promise<Resp
   }
 
   const n = Math.min(Math.max(body.options?.n || 1, 1), MAX_N);
-  const aspectRatio = body.options?.aspect_ratio;
+  const aspectRatio = normalizeAspectRatio(body.options?.aspect_ratio);
   const sourceImageUrl = body.source_image_url;
   const ephemeral = body.ephemeral === true;
 
