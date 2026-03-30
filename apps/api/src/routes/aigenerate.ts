@@ -135,6 +135,16 @@ function base64ToArrayBuffer(b64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+function detectImageFormat(b64: string): { mime: string; ext: string } {
+  const header = atob(b64.slice(0, 24));
+  const bytes = Array.from(header, (c) => c.charCodeAt(0));
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return { mime: 'image/png', ext: 'png' };
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) return { mime: 'image/jpeg', ext: 'jpg' };
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return { mime: 'image/webp', ext: 'webp' };
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return { mime: 'image/gif', ext: 'gif' };
+  return { mime: 'image/png', ext: 'png' };
+}
+
 function genErrorResponse(code: ErrorCode, message: string, status: number, extra?: Record<string, boolean>) {
   return jsonResponse({ status: 'error', error: { code, message, ...extra } }, status);
 }
@@ -356,12 +366,13 @@ async function uploadEphemeral(env: Env, base64Images: string[], modelPrefix: st
 
   for (const b64 of base64Images) {
     const id = crypto.randomUUID().slice(0, 12);
-    const key = `ai-gen/${datePrefix}/${modelPrefix}-${id}.png`;
+    const { mime, ext } = detectImageFormat(b64);
+    const key = `ai-gen/${datePrefix}/${modelPrefix}-${id}.${ext}`;
 
     try {
       const buffer = base64ToArrayBuffer(b64);
       await env.BUCKET.put(key, buffer, {
-        httpMetadata: { contentType: 'image/png' },
+        httpMetadata: { contentType: mime },
       });
       results.push({ url: `${env.CDN_BASE_URL}/${key}`, expires_at: expiresAt });
     } catch (err) {
@@ -378,20 +389,21 @@ async function uploadPermanent(env: Env, base64Images: string[], modelPrefix: st
 
   for (const b64 of base64Images) {
     try {
+      const { mime, ext } = detectImageFormat(b64);
       const buffer = base64ToArrayBuffer(b64);
       const hash = await generateFileHash(buffer);
-      const storedPath = generateStoragePath(hash, 'png');
+      const storedPath = generateStoragePath(hash, ext);
 
-      await uploadToR2Permanent(env.BUCKET, storedPath, buffer, 'image/png');
+      await uploadToR2Permanent(env.BUCKET, storedPath, buffer, mime);
 
       const fileId = uuidv4();
-      const name = `${modelPrefix}-${prompt.slice(0, 60).replace(/[^a-zA-Z0-9 _-]/g, '').trim()}.png`;
+      const name = `${modelPrefix}-${prompt.slice(0, 60).replace(/[^a-zA-Z0-9 _-]/g, '').trim()}.${ext}`;
 
       await insertFile(env.DB, {
         id: fileId,
         original_name: name,
         stored_path: storedPath,
-        mime_type: 'image/png',
+        mime_type: mime,
         file_size: buffer.byteLength,
         file_type: 'image',
         width: null,
