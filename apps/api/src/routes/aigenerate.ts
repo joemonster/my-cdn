@@ -42,7 +42,7 @@ const MODELS: Record<string, ModelConfig> = {
     prefix: 'flux',
   },
   'flux-schnell': {
-    slug: 'bfl/flux-schnell',
+    slug: 'prodia/flux-fast-schnell',
     type: 'image-only',
     timeout: 20000,
     prefix: 'flxs',
@@ -148,11 +148,12 @@ async function callImageOnly(
   n: number,
   aspectRatio?: string,
 ): Promise<{ base64Images: string[]; usage?: UsageInfo; errorCode?: ErrorCode; errorMessage?: string }> {
+  const isOpenAI = model.slug.startsWith('openai/');
   const body: Record<string, unknown> = {
     model: model.slug,
     prompt,
     n,
-    response_format: 'b64_json',
+    ...(!isOpenAI && { response_format: 'b64_json' }),
   };
   if (aspectRatio) body.aspect_ratio = aspectRatio;
   if (model.quality) body.quality = model.quality;
