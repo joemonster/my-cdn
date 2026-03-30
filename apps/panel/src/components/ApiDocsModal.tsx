@@ -47,6 +47,8 @@ Upload a file (image or video).
 - Body:
   - \`file\` (required): The file to upload
   - \`thumbnail\` (optional): Base64 encoded thumbnail image
+  - \`prefix\` (optional): String prepended to the original filename (e.g. "project_" → "project_photo.jpg")
+  - \`bucket\` (optional): Label/tag stored in DB and displayed in dashboard (for organizing files)
 
 **Limits:**
 - Images: max 5MB (jpg, jpeg, png, webp, gif)
@@ -64,6 +66,7 @@ Upload a file (image or video).
     "file_size": 245000,
     "mime_type": "image/jpeg",
     "file_type": "image",
+    "bucket": "my-project",
     "created_at": "2025-12-30T10:00:00Z"
   }
 }
@@ -167,6 +170,12 @@ Generate images using AI models via Vercel AI Gateway.
 - \`nano-banana\` — Gemini 2.5 Flash (multimodal, supports source images)
 - \`imagen\` — Google Imagen 4.0 (image-only)
 - \`flux\` — Flux 2 Pro (image-only)
+- \`flux-schnell\` — Flux Schnell (image-only, fast)
+- \`gpt-image-low\` — OpenAI GPT Image 1, low quality (image-only)
+- \`gpt-image-medium\` — OpenAI GPT Image 1, medium quality (image-only)
+- \`gpt-image-high\` — OpenAI GPT Image 1, high quality (image-only)
+- \`recraft\` — Recraft V4 (image-only)
+- \`recraft-pro\` — Recraft V4 Pro (image-only)
 
 **JSON Request:**
 \`\`\`json
@@ -203,6 +212,7 @@ Generate images using AI models via Vercel AI Gateway.
   ],
   "model_used": "google/imagen-4.0-generate",
   "ephemeral": false,
+  "usage": { "prompt_tokens": 50, "completion_tokens": 1024, "total_tokens": 1074 },
   "duration_ms": 8500
 }
 \`\`\`
@@ -219,6 +229,7 @@ Generate images using AI models via Vercel AI Gateway.
   ],
   "model_used": "google/imagen-4.0-generate",
   "ephemeral": true,
+  "usage": { "prompt_tokens": 50, "completion_tokens": 1024, "total_tokens": 1074 },
   "duration_ms": 8500
 }
 \`\`\`
@@ -229,7 +240,8 @@ Generate images using AI models via Vercel AI Gateway.
 - By default (ephemeral=false), images are saved permanently with a DB record (visible in panel, manageable via /api/file/:id)
 - With ephemeral=true, images are stored in R2 with 24h TTL (auto-deleted by daily cron)
 - Source images (\`image\` or \`source_image_url\`) only work with multimodal models (nano-banana, nano-banana-pro)
-- File names are prefixed with model shortcode: imgn-, flux-, nb-, nbpro-
+- File names are prefixed with model shortcode: imgn-, flux-, flxs-, gptil-, gptim-, gptih-, rcft-, rcftp-, nb-, nbpro-
+- \`usage\` field contains token usage info from the provider (null if not available)
 
 ---
 
@@ -412,7 +424,8 @@ All errors return JSON with this format:
                   <code className="text-white font-mono">/api/upload</code>
                 </div>
                 <p className="text-gray-400 text-sm mb-2">Upload image or video file (multipart/form-data)</p>
-                <p className="text-gray-500 text-xs">Limits: Images 5MB, Videos 15MB</p>
+                <p className="text-gray-500 text-xs mb-1">Limits: Images 5MB, Videos 15MB</p>
+                <p className="text-gray-500 text-xs">Optional: prefix (prepend to filename), bucket (label/tag)</p>
               </div>
 
               {/* List files */}
@@ -460,7 +473,7 @@ All errors return JSON with this format:
                   <span className="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded">AI</span>
                 </div>
                 <p className="text-gray-400 text-sm mb-2">Generate images with AI (JSON or multipart/form-data)</p>
-                <p className="text-gray-500 text-xs mb-1">Models: nano-banana-pro, nano-banana, imagen, flux</p>
+                <p className="text-gray-500 text-xs mb-1">Models: nano-banana-pro, nano-banana, imagen, flux, flux-schnell, gpt-image-low, gpt-image-medium, gpt-image-high, recraft, recraft-pro</p>
                 <p className="text-gray-500 text-xs mb-1">Default: saved permanently (with DB record). Set ephemeral=true for 24h TTL</p>
                 <p className="text-gray-500 text-xs">Supports source image upload for multimodal models (editing/translation)</p>
               </div>

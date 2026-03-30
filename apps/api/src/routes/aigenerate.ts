@@ -13,6 +13,7 @@ interface ModelConfig {
   type: ModelType;
   timeout: number;
   prefix: string;
+  quality?: string;
 }
 
 const MODELS: Record<string, ModelConfig> = {
@@ -40,6 +41,45 @@ const MODELS: Record<string, ModelConfig> = {
     timeout: 45000,
     prefix: 'flux',
   },
+  'flux-schnell': {
+    slug: 'bfl/flux-schnell',
+    type: 'image-only',
+    timeout: 20000,
+    prefix: 'flxs',
+  },
+  'gpt-image-low': {
+    slug: 'openai/gpt-image-1',
+    type: 'image-only',
+    timeout: 45000,
+    prefix: 'gptil',
+    quality: 'low',
+  },
+  'gpt-image-medium': {
+    slug: 'openai/gpt-image-1',
+    type: 'image-only',
+    timeout: 60000,
+    prefix: 'gptim',
+    quality: 'medium',
+  },
+  'gpt-image-high': {
+    slug: 'openai/gpt-image-1',
+    type: 'image-only',
+    timeout: 90000,
+    prefix: 'gptih',
+    quality: 'high',
+  },
+  recraft: {
+    slug: 'recraft/recraft-v4',
+    type: 'image-only',
+    timeout: 45000,
+    prefix: 'rcft',
+  },
+  'recraft-pro': {
+    slug: 'recraft/recraft-v4-pro',
+    type: 'image-only',
+    timeout: 60000,
+    prefix: 'rcftp',
+  },
 };
 
 const VALID_MODELS = Object.keys(MODELS);
@@ -57,10 +97,17 @@ interface GenerateRequest {
   };
 }
 
+interface UsageInfo {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
 interface GenerateResult {
   base64Images: string[];
   modelUsed: string;
   modelPrefix: string;
+  usage?: UsageInfo;
 }
 
 type ErrorCode =
@@ -100,7 +147,7 @@ async function callImageOnly(
   prompt: string,
   n: number,
   aspectRatio?: string,
-): Promise<{ base64Images: string[]; errorCode?: ErrorCode; errorMessage?: string }> {
+): Promise<{ base64Images: string[]; usage?: UsageInfo; errorCode?: ErrorCode; errorMessage?: string }> {
   const body: Record<string, unknown> = {
     model: model.slug,
     prompt,
@@ -108,6 +155,7 @@ async function callImageOnly(
     response_format: 'b64_json',
   };
   if (aspectRatio) body.aspect_ratio = aspectRatio;
+  if (model.quality) body.quality = model.quality;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), model.timeout);
@@ -132,11 +180,11 @@ async function callImageOnly(
       return { base64Images: [], errorCode: 'API_ERROR', errorMessage: `Provider returned ${res.status}: ${text.slice(0, 200)}` };
     }
 
-    const data = await res.json() as { data?: Array<{ b64_json?: string }> };
+    const data = await res.json() as { data?: Array<{ b64_json?: string }>; usage?: UsageInfo };
     const images = (data.data || []).map((d) => d.b64_json).filter(Boolean) as string[];
     if (images.length === 0) return { base64Images: [], errorCode: 'MODEL_EMPTY_RESPONSE', errorMessage: 'Model returned no images' };
 
-    return { base64Images: images };
+    return { base64Images: images, usage: data.usage };
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     if (err instanceof DOMException && err.name === 'AbortError') {
@@ -151,7 +199,7 @@ async function callMultimodal(
   model: ModelConfig,
   prompt: string,
   sourceImageUrl?: string,
-): Promise<{ base64Images: string[]; errorCode?: ErrorCode; errorMessage?: string }> {
+): Promise<{ base64Images: string[]; usage?: UsageInfo; errorCode?: ErrorCode; errorMessage?: string }> {
   // Build messages
   let content: unknown;
   if (sourceImageUrl) {
@@ -195,7 +243,8 @@ async function callMultimodal(
     const images = extractImagesFromMultimodal(data);
     if (images.length === 0) return { base64Images: [], errorCode: 'MODEL_EMPTY_RESPONSE', errorMessage: 'Model returned no images in response' };
 
-    return { base64Images: images };
+    const usage = (data as { usage?: UsageInfo }).usage;
+    return { base64Images: images, usage };
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     if (err instanceof DOMException && err.name === 'AbortError') {
@@ -280,7 +329,7 @@ async function generateWithRetry(
   }
 
   if (result.base64Images.length > 0) {
-    return { base64Images: result.base64Images, modelUsed: model.slug, modelPrefix: model.prefix };
+    return { base64Images: result.base64Images, modelUsed: model.slug, modelPrefix: model.prefix, usage: result.usage };
   }
 
   return genErrorResponse(
@@ -348,6 +397,7 @@ async function uploadPermanent(env: Env, base64Images: string[], modelPrefix: st
         height: null,
         duration: null,
         thumbnail_path: null,
+        bucket: null,
       });
 
       const record = await getFileById(env.DB, fileId);
@@ -454,6 +504,7 @@ export async function handleAiGenerate(request: Request, env: Env): Promise<Resp
     images: uploadResult,
     model_used: genResult.modelUsed,
     ephemeral,
+    usage: genResult.usage || null,
     duration_ms: Date.now() - startTime,
   });
 }
