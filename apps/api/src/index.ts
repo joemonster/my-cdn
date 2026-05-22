@@ -3,7 +3,7 @@ import { validateApiKey, validateAdminCredentials } from './middleware/auth';
 import { handleUpload } from './routes/upload';
 import { handleFetchUrl } from './routes/fetch-url';
 import { handleGetFiles } from './routes/files';
-import { handleGetFile, handleUpdateFile, handleDeleteFile } from './routes/file';
+import { handleGetFile, handleUpdateFile, handleDeleteFile, handleRestoreFile, handleGetFileContent } from './routes/file';
 import { handleViewPage } from './routes/view';
 import { handleAiGenerate, cleanupExpiredImages } from './routes/aigenerate';
 import { getFromR2 } from './utils/storage';
@@ -134,6 +134,16 @@ async function handleApiRoutes(request: Request, env: Env, path: string): Promis
 
   if (path === '/api/files' && request.method === 'GET') {
     return handleGetFiles(request, env);
+  }
+
+  const restoreMatch = path.match(/^\/api\/file\/([a-f0-9-]+)\/restore$/i);
+  if (restoreMatch && request.method === 'POST') {
+    return handleRestoreFile(request, env, restoreMatch[1]);
+  }
+
+  const contentMatch = path.match(/^\/api\/file\/([a-f0-9-]+)\/content$/i);
+  if (contentMatch && request.method === 'GET') {
+    return handleGetFileContent(request, env, contentMatch[1]);
   }
 
   const fileMatch = path.match(/^\/api\/file\/([a-f0-9-]+)$/i);
