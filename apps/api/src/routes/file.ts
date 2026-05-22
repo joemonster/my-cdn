@@ -1,6 +1,6 @@
 import { Env } from '../types';
-import { getFileById, updateFile, hardDeleteFile, fileRecordToResponse } from '../utils/db';
-import { deleteFromR2, uploadToR2 } from '../utils/storage';
+import { getFileById, updateFile, hardDeleteFile, softDeleteFile, restoreFile, fileRecordToResponse } from '../utils/db';
+import { deleteFromR2, uploadToR2, moveR2Object } from '../utils/storage';
 import { errorResponse, successResponse } from '../utils/response';
 
 export async function handleGetFile(
@@ -97,20 +97,36 @@ export async function handleDeleteFile(
 ): Promise<Response> {
   try {
     const file = await getFileById(env.DB, fileId);
-
     if (!file) {
       return errorResponse('File not found', 404);
     }
 
-    await deleteFromR2(env.BUCKET, file.stored_path);
+    const url = new URL(request.url);
+    const force = url.searchParams.get('force') === 'true';
 
-    if (file.thumbnail_path) {
-      await deleteFromR2(env.BUCKET, file.thumbnail_path);
+    if (force) {
+      await deleteFromR2(env.BUCKET, file.stored_path);
+      if (file.thumbnail_path) {
+        await deleteFromR2(env.BUCKET, file.thumbnail_path);
+      }
+      await hardDeleteFile(env.DB, fileId);
+      return successResponse({ message: 'File deleted permanently' });
     }
 
-    await hardDeleteFile(env.DB, fileId);
+    if (file.deleted_at) {
+      return errorResponse('Already in trash', 400);
+    }
 
-    return successResponse({ message: 'File deleted successfully' });
+    const newStoredPath = `trash/${file.stored_path}`;
+    const newThumbnailPath = file.thumbnail_path ? `trash/${file.thumbnail_path}` : null;
+
+    await moveR2Object(env.BUCKET, file.stored_path, newStoredPath);
+    if (file.thumbnail_path && newThumbnailPath) {
+      await moveR2Object(env.BUCKET, file.thumbnail_path, newThumbnailPath);
+    }
+    await softDeleteFile(env.DB, fileId, newStoredPath, newThumbnailPath);
+
+    return successResponse({ message: 'File moved to trash' });
   } catch (error) {
     console.error('Delete file error:', error);
     return errorResponse(
