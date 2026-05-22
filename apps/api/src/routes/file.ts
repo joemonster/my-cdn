@@ -135,3 +135,38 @@ export async function handleDeleteFile(
     );
   }
 }
+
+export async function handleRestoreFile(
+  request: Request,
+  env: Env,
+  fileId: string
+): Promise<Response> {
+  try {
+    const file = await getFileById(env.DB, fileId);
+    if (!file) {
+      return errorResponse('File not found', 404);
+    }
+    if (!file.deleted_at) {
+      return errorResponse('Not in trash', 400);
+    }
+
+    const originalStoredPath = file.stored_path.replace(/^trash\//, '');
+    const originalThumbnailPath = file.thumbnail_path
+      ? file.thumbnail_path.replace(/^trash\//, '')
+      : null;
+
+    await moveR2Object(env.BUCKET, file.stored_path, originalStoredPath);
+    if (file.thumbnail_path && originalThumbnailPath) {
+      await moveR2Object(env.BUCKET, file.thumbnail_path, originalThumbnailPath);
+    }
+    await restoreFile(env.DB, fileId, originalStoredPath, originalThumbnailPath);
+
+    return successResponse({ message: 'File restored' });
+  } catch (error) {
+    console.error('Restore file error:', error);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Internal server error',
+      500
+    );
+  }
+}
