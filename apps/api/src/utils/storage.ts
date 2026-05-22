@@ -39,3 +39,19 @@ export async function generateFileHash(data: ArrayBuffer): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('').substring(0, 16);
 }
+
+export async function moveR2Object(
+  bucket: R2Bucket,
+  from: string,
+  to: string,
+): Promise<void> {
+  const obj = await bucket.get(from);
+  if (!obj) {
+    throw new Error(`Source object not found: ${from}`);
+  }
+  await bucket.put(to, obj.body, {
+    httpMetadata: obj.httpMetadata,
+    customMetadata: obj.customMetadata,
+  });
+  await bucket.delete(from);
+}
