@@ -13,6 +13,7 @@ export interface FileData {
   height?: number | null;
   duration?: number | null;
   bucket?: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -67,6 +68,7 @@ export interface FilesQueryParams {
   order?: SortOrder;
   type?: FileTypeFilter;
   search?: string;
+  trash?: boolean;
 }
 
 class ApiClient {
@@ -154,6 +156,7 @@ class ApiClient {
     if (params.order) searchParams.set('order', params.order);
     if (params.type) searchParams.set('type', params.type);
     if (params.search) searchParams.set('search', params.search);
+    if (params.trash) searchParams.set('trash', 'true');
 
     const queryString = searchParams.toString();
     const endpoint = `/api/files${queryString ? `?${queryString}` : ''}`;
@@ -179,10 +182,30 @@ class ApiClient {
     });
   }
 
-  async deleteFile(id: string): Promise<DeleteResponse> {
-    return this.request<DeleteResponse>(`/api/file/${id}`, {
+  async deleteFile(id: string, opts?: { force?: boolean }): Promise<DeleteResponse> {
+    const query = opts?.force ? '?force=true' : '';
+    return this.request<DeleteResponse>(`/api/file/${id}${query}`, {
       method: 'DELETE',
     });
+  }
+
+  async restoreFile(id: string): Promise<DeleteResponse> {
+    return this.request<DeleteResponse>(`/api/file/${id}/restore`, {
+      method: 'POST',
+    });
+  }
+
+  async getFileBlobUrl(id: string, type?: 'thumbnail'): Promise<string> {
+    const token = this.getToken();
+    const url = `${API_URL}/api/file/${id}/content${type ? `?type=${type}` : ''}`;
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch content (HTTP ${res.status})`);
+    }
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
   }
 
   async fetchUrl(url: string): Promise<File> {
