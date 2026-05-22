@@ -136,6 +136,7 @@ export default function DashboardPage() {
   // Handle pagination
   const handlePageChange = (page: number) => {
     setPagination((p) => ({ ...p, page }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Handle type filter
@@ -296,7 +297,7 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <div className="flex items-center gap-3">
+            <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-dark-600 to-dark-700
                              border border-dark-500 flex items-center justify-center">
                 <CloudUpload className="w-5 h-5 text-neon-cyan" />
@@ -305,7 +306,7 @@ export default function DashboardPage() {
                 <h1 className="text-lg font-bold text-white">My CDN</h1>
                 <p className="text-xs text-gray-500 font-mono">Admin Panel</p>
               </div>
-            </div>
+            </a>
 
             {/* Actions */}
             <div className="flex items-center gap-2">
@@ -343,14 +344,17 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Toolbar / Bulk Actions */}
         {selectedIds.size > 0 ? (
-          <BulkActionsBar
-            selectedCount={selectedIds.size}
-            onClearSelection={handleClearSelection}
-            onBulkDelete={handleBulkDelete}
-            onBulkDownload={handleBulkDownload}
-            isDeleting={isBulkDeleting}
-            isDownloading={isBulkDownloading}
-          />
+          <>
+            <BulkActionsBar
+              selectedCount={selectedIds.size}
+              onClearSelection={handleClearSelection}
+              onBulkDelete={handleBulkDelete}
+              onBulkDownload={handleBulkDownload}
+              isDeleting={isBulkDeleting}
+              isDownloading={isBulkDownloading}
+            />
+            <div className="h-16" />
+          </>
         ) : (
           <div className="flex flex-col sm:flex-row gap-4 mb-6">
             {/* Search */}

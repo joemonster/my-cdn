@@ -13,7 +13,7 @@
     "prefix": "shx",
     "bucket": "sharex"
   },
-  "URL": "{json:view_url}",
+  "URL": "{json:url}",
   "ThumbnailURL": "{json:thumbnail_url}",
   "DeletionURL": "",
   "ErrorMessage": "{json:error}"

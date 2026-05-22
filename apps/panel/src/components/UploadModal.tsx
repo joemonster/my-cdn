@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
-import { X, Upload, FileImage, FileVideo, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { X, Upload, FileImage, FileVideo, AlertCircle, CheckCircle, Link2, ClipboardPaste, Loader2 } from 'lucide-react';
 import { api, generateImageThumbnail, generateVideoThumbnail, formatFileSize } from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -9,6 +9,59 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_VIDEO_SIZE = 15 * 1024 * 1024; // 15MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm'];
+const CONVERTIBLE_IMAGE_MIMES = ['image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff'];
+const CONVERTIBLE_EXTENSION_REGEX = /\.(avif|heic|heif|bmp|tiff?)$/i;
+const ACCEPT_ATTRIBUTE = [
+  ...ALLOWED_IMAGE_TYPES,
+  ...CONVERTIBLE_IMAGE_MIMES,
+  ...ALLOWED_VIDEO_TYPES,
+  '.avif',
+  '.heic',
+  '.heif',
+  '.bmp',
+  '.tiff',
+  '.tif',
+].join(',');
+
+function needsJpegConversion(file: File): boolean {
+  if (ALLOWED_IMAGE_TYPES.includes(file.type)) return false;
+  if (CONVERTIBLE_IMAGE_MIMES.includes(file.type)) return true;
+  if (file.type.startsWith('image/')) return true;
+  if (!file.type && CONVERTIBLE_EXTENSION_REGEX.test(file.name)) return true;
+  return false;
+}
+
+async function convertImageToJpeg(file: File): Promise<File> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Browser cannot decode this image format'));
+      el.src = url;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Failed to get canvas context');
+    // White background so transparent pixels do not become black in JPG
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92);
+    });
+    if (!blob) throw new Error('Canvas could not encode JPG');
+
+    const stem = (file.name.split('.')[0] || 'image').trim() || 'image';
+    return new File([blob], `${stem}.jpg`, { type: 'image/jpeg', lastModified: file.lastModified });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 interface UploadModalProps {
   onClose: () => void;
@@ -26,7 +79,10 @@ interface UploadFile {
 export function UploadModal({ onClose, onUploadComplete }: UploadModalProps) {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlFetching, setUrlFetching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
   const validateFile = (file: File): string | null => {
     const isImage = ALLOWED_IMAGE_TYPES.includes(file.type);
@@ -45,23 +101,37 @@ export function UploadModal({ onClose, onUploadComplete }: UploadModalProps) {
   };
 
   const processFile = async (file: File): Promise<UploadFile> => {
-    const error = validateFile(file);
+    let working = file;
+    if (needsJpegConversion(working)) {
+      try {
+        working = await convertImageToJpeg(working);
+      } catch (e) {
+        return {
+          file: working,
+          progress: 0,
+          status: 'error',
+          error: e instanceof Error ? e.message : 'Failed to convert image to JPG',
+        };
+      }
+    }
+
+    const error = validateFile(working);
     if (error) {
-      return { file, progress: 0, status: 'error', error };
+      return { file: working, progress: 0, status: 'error', error };
     }
 
     let thumbnail: string | undefined;
     try {
-      if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        thumbnail = await generateImageThumbnail(file);
-      } else if (ALLOWED_VIDEO_TYPES.includes(file.type)) {
-        thumbnail = await generateVideoThumbnail(file);
+      if (ALLOWED_IMAGE_TYPES.includes(working.type)) {
+        thumbnail = await generateImageThumbnail(working);
+      } else if (ALLOWED_VIDEO_TYPES.includes(working.type)) {
+        thumbnail = await generateVideoThumbnail(working);
       }
     } catch (e) {
       console.error('Thumbnail generation failed:', e);
     }
 
-    return { file, thumbnail, progress: 0, status: 'pending' };
+    return { file: working, thumbnail, progress: 0, status: 'pending' };
   };
 
   const handleFiles = async (fileList: FileList) => {
@@ -94,6 +164,73 @@ export function UploadModal({ onClose, onUploadComplete }: UploadModalProps) {
       handleFiles(e.target.files);
     }
   };
+
+  const handleUrlFetch = useCallback(async (rawUrl?: string) => {
+    const url = (rawUrl ?? urlInput).trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) {
+      toast.error('URL must start with http:// or https://');
+      return;
+    }
+
+    setUrlFetching(true);
+    try {
+      const file = await api.fetchUrl(url);
+      const processed = await processFile(file);
+      setFiles((prev) => [...prev, processed]);
+      setUrlInput('');
+      if (processed.status === 'error') {
+        toast.error(processed.error || 'Downloaded file is not valid');
+      } else {
+        toast.success(`Downloaded ${processed.file.name}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to download URL');
+    } finally {
+      setUrlFetching(false);
+    }
+  }, [urlInput]);
+
+  useEffect(() => {
+    const handler = async (e: ClipboardEvent) => {
+      if (!e.clipboardData) return;
+
+      const target = e.target as HTMLElement | null;
+      const isEditable =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          (target as HTMLElement).isContentEditable);
+
+      const items = Array.from(e.clipboardData.items);
+      const fileItems = items.filter((item) => item.kind === 'file');
+
+      if (fileItems.length > 0) {
+        e.preventDefault();
+        const pasted = fileItems
+          .map((item) => item.getAsFile())
+          .filter((f): f is File => f !== null);
+        if (pasted.length === 0) return;
+        const processed = await Promise.all(pasted.map(processFile));
+        setFiles((prev) => [...prev, ...processed]);
+        toast.success(`Pasted ${pasted.length} file${pasted.length > 1 ? 's' : ''}`);
+        return;
+      }
+
+      // If user is typing in an input, let default text paste happen
+      if (isEditable) return;
+
+      const text = e.clipboardData.getData('text/plain').trim();
+      if (text && /^https?:\/\/\S+$/i.test(text)) {
+        e.preventDefault();
+        setUrlInput(text);
+        urlInputRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('paste', handler);
+    return () => document.removeEventListener('paste', handler);
+  }, []);
 
   const removeFile = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -193,7 +330,7 @@ export function UploadModal({ onClose, onUploadComplete }: UploadModalProps) {
               ref={fileInputRef}
               type="file"
               multiple
-              accept={[...ALLOWED_IMAGE_TYPES, ...ALLOWED_VIDEO_TYPES].join(',')}
+              accept={ACCEPT_ATTRIBUTE}
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -207,6 +344,56 @@ export function UploadModal({ onClose, onUploadComplete }: UploadModalProps) {
             <p className="text-xs text-gray-600 mt-4 font-mono">
               Images: JPG, PNG, WebP, GIF (max 5MB) | Videos: MP4, WebM (max 15MB)
             </p>
+            <p className="text-xs text-gray-600 mt-1 font-mono">
+              AVIF / HEIC / HEIF / BMP / TIFF auto-converted to JPG
+            </p>
+          </div>
+        </div>
+
+        {/* URL + Paste */}
+        <div className="px-4 pb-4 -mt-2">
+          <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
+            <ClipboardPaste className="w-3.5 h-3.5" />
+            <span>Paste screenshot with Ctrl+V, or fetch from URL:</span>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              <input
+                ref={urlInputRef}
+                type="url"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleUrlFetch();
+                  }
+                }}
+                placeholder="https://example.com/image.avif"
+                disabled={urlFetching}
+                className="w-full pl-9 pr-3 py-2 bg-dark-700 border border-dark-600 rounded-lg text-sm
+                           text-white placeholder-gray-600 focus:outline-none focus:border-neon-cyan/50
+                           disabled:opacity-50"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => handleUrlFetch()}
+              disabled={urlFetching || !urlInput.trim()}
+              className="px-4 py-2 rounded-lg bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30
+                         hover:bg-neon-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-colors text-sm font-medium whitespace-nowrap flex items-center gap-2"
+            >
+              {urlFetching ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Downloading
+                </>
+              ) : (
+                'Fetch URL'
+              )}
+            </button>
           </div>
         </div>
 

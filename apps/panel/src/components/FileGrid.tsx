@@ -34,7 +34,7 @@ export function FileGrid({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[...Array(8)].map((_, i) => (
           <div key={i} className="animate-pulse">
-            <div className="aspect-square bg-dark-700 rounded-xl" />
+            <div className="aspect-[4/3] bg-dark-700 rounded-xl" />
             <div className="h-3 bg-dark-700 rounded mt-2 w-2/3" />
           </div>
         ))}
@@ -51,6 +51,8 @@ export function FileGrid({
       </div>
     );
   }
+
+  const someSelected = selectedIds.size > 0;
 
   return (
     <div>
@@ -69,7 +71,7 @@ export function FileGrid({
         {files.map((file) => (
           <div key={file.id} className="group">
             <div
-              className={`relative aspect-square rounded-xl overflow-hidden bg-dark-700 cursor-pointer
+              className={`relative aspect-[4/3] rounded-xl overflow-hidden bg-dark-700 cursor-pointer
                          border-2 transition-all ${
                            selectedIds.has(file.id)
                              ? 'border-neon-cyan'
@@ -129,7 +131,11 @@ export function FileGrid({
               )}
 
               <div
-                className="absolute top-2 left-2"
+                className={`absolute top-2 left-2 transition-opacity duration-150 ${
+                  someSelected
+                    ? 'opacity-100'
+                    : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+                }`}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleSelect(file.id);

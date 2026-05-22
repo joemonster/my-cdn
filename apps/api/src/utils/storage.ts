@@ -25,8 +25,9 @@ function getYearMonth(): string {
   return `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function generateStoragePath(hash: string, extension: string): string {
-  return `${getYearMonth()}/${hash}.${extension}`;
+export function generateStoragePath(hash: string, extension: string, prefix?: string): string {
+  const filename = prefix ? `${prefix}-${hash}` : hash;
+  return `${getYearMonth()}/${filename}.${extension}`;
 }
 
 export function generateThumbnailPath(hash: string, extension: string): string {

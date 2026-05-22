@@ -1,6 +1,7 @@
 import { Env, EXTENSION_TO_MIME } from './types';
 import { validateApiKey, validateAdminCredentials } from './middleware/auth';
 import { handleUpload } from './routes/upload';
+import { handleFetchUrl } from './routes/fetch-url';
 import { handleGetFiles } from './routes/files';
 import { handleGetFile, handleUpdateFile, handleDeleteFile } from './routes/file';
 import { handleViewPage } from './routes/view';
@@ -121,6 +122,10 @@ async function handleApiRoutes(request: Request, env: Env, path: string): Promis
 
   if (path === '/api/upload' && request.method === 'POST') {
     return handleUpload(request, env);
+  }
+
+  if (path === '/api/fetch-url' && request.method === 'POST') {
+    return handleFetchUrl(request, env);
   }
 
   if (path === '/api/images/aigenerate' && request.method === 'POST') {

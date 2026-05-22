@@ -185,6 +185,41 @@ class ApiClient {
     });
   }
 
+  async fetchUrl(url: string): Promise<File> {
+    const token = this.getToken();
+    const response = await fetch(`${API_URL}/api/fetch-url`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      let message = `Download failed (HTTP ${response.status})`;
+      try {
+        const data = (await response.json()) as { error?: string };
+        if (data?.error) message = data.error;
+      } catch {
+        // Non-JSON error body — keep default message
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const filenameHeader = response.headers.get('X-Original-Filename');
+    let filename = 'download';
+    if (filenameHeader) {
+      try {
+        filename = decodeURIComponent(filenameHeader);
+      } catch {
+        filename = filenameHeader;
+      }
+    }
+    return new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+  }
+
   async uploadFile(
     file: File,
     thumbnail?: string,

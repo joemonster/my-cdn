@@ -22,8 +22,8 @@ export function BulkActionsBar({
   const busy = isDeleting || isDownloading;
 
   return (
-    <div className="sticky top-0 z-30 flex flex-col sm:flex-row gap-4 mb-6 py-3 px-4 -mx-4
-                    bg-dark-900/95 backdrop-blur-sm border-b border-dark-600">
+    <div className="fixed top-0 left-0 right-0 z-50 flex flex-col sm:flex-row gap-4 py-3 px-6
+                    bg-dark-900/95 backdrop-blur-sm border-b border-dark-600 shadow-lg">
       <div className="flex items-center gap-3 flex-1">
         <button
           onClick={onClearSelection}
