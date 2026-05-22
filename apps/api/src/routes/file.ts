@@ -170,3 +170,44 @@ export async function handleRestoreFile(
     );
   }
 }
+
+export async function handleGetFileContent(
+  request: Request,
+  env: Env,
+  fileId: string
+): Promise<Response> {
+  try {
+    const file = await getFileById(env.DB, fileId);
+    if (!file) {
+      return errorResponse('File not found', 404);
+    }
+
+    const url = new URL(request.url);
+    const type = url.searchParams.get('type');
+    const path = type === 'thumbnail' ? file.thumbnail_path : file.stored_path;
+    if (!path) {
+      return errorResponse('Thumbnail not available', 404);
+    }
+
+    const obj = await env.BUCKET.get(path);
+    if (!obj) {
+      return errorResponse('Object not found in storage', 404);
+    }
+
+    return new Response(obj.body, {
+      status: 200,
+      headers: {
+        'Content-Type': obj.httpMetadata?.contentType || file.mime_type || 'application/octet-stream',
+        'Content-Length': obj.size.toString(),
+        'Cache-Control': 'private, no-store',
+        'ETag': obj.etag,
+      },
+    });
+  } catch (error) {
+    console.error('Get file content error:', error);
+    return errorResponse(
+      error instanceof Error ? error.message : 'Internal server error',
+      500
+    );
+  }
+}
