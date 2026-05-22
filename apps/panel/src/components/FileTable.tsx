@@ -14,9 +14,11 @@ import {
   FileImage,
   FileVideo,
   MoreVertical,
+  Undo2,
 } from 'lucide-react';
 import { FileData, formatFileSize, formatDate, api, SortField, SortOrder } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { AuthBlobImage } from './AuthBlobImage';
 
 interface FileTableProps {
   files: FileData[];
@@ -30,6 +32,8 @@ interface FileTableProps {
   onSort: (field: SortField) => void;
   onPreview: (file: FileData) => void;
   onRefresh: () => void;
+  trashMode?: boolean;
+  onRestore?: (id: string) => Promise<void> | void;
 }
 
 export function FileTable({
@@ -44,6 +48,8 @@ export function FileTable({
   onSort,
   onPreview,
   onRefresh,
+  trashMode = false,
+  onRestore,
 }: FileTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -92,6 +98,30 @@ export function FileTable({
     try {
       await api.deleteFile(id);
       toast.success('File deleted');
+      onRefresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    if (!onRestore) return;
+    try {
+      await onRestore(id);
+      toast.success('File restored');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to restore');
+    }
+  };
+
+  const handleDeleteForever = async (id: string) => {
+    if (!confirm('Delete this file permanently? This cannot be undone.')) return;
+    setDeletingId(id);
+    try {
+      await api.deleteFile(id, { force: true });
+      toast.success('File deleted permanently');
       onRefresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete');
@@ -208,7 +238,19 @@ export function FileTable({
               className="w-16 h-12 rounded bg-dark-600 overflow-hidden cursor-pointer
                         hover:ring-2 hover:ring-neon-cyan/50 transition-all"
             >
-              {file.thumbnail_url ? (
+              {trashMode ? (
+                file.file_type === 'image' || file.thumbnail_url ? (
+                  <AuthBlobImage
+                    id={file.id}
+                    type={file.thumbnail_url ? 'thumbnail' : undefined}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <FileVideo className="w-6 h-6 text-neon-purple" />
+                  </div>
+                )
+              ) : file.thumbnail_url ? (
                 <img
                   src={file.thumbnail_url}
                   alt=""
@@ -336,84 +378,106 @@ export function FileTable({
 
             {/* Actions */}
             <div className="flex items-center gap-1 relative">
-              <button
-                onClick={() => onPreview(file)}
-                className="p-2 rounded hover:bg-dark-500 transition-colors md:hidden"
-                title="Preview"
-              >
-                <Eye className="w-4 h-4 text-gray-400" />
-              </button>
-              <button
-                onClick={() => handleCopyLink(file.url)}
-                className="p-2 rounded hover:bg-dark-500 transition-colors"
-                title="Copy link"
-              >
-                <Copy className="w-4 h-4 text-gray-400 hover:text-neon-cyan" />
-              </button>
+              {trashMode ? (
+                <>
+                  <button
+                    onClick={() => handleRestore(file.id)}
+                    className="p-2 rounded hover:bg-neon-cyan/10 transition-colors"
+                    title="Restore"
+                  >
+                    <Undo2 className="w-4 h-4 text-neon-cyan" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteForever(file.id)}
+                    disabled={deletingId === file.id}
+                    className="p-2 rounded hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    title="Delete forever"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => onPreview(file)}
+                    className="p-2 rounded hover:bg-dark-500 transition-colors md:hidden"
+                    title="Preview"
+                  >
+                    <Eye className="w-4 h-4 text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => handleCopyLink(file.url)}
+                    className="p-2 rounded hover:bg-dark-500 transition-colors"
+                    title="Copy link"
+                  >
+                    <Copy className="w-4 h-4 text-gray-400 hover:text-neon-cyan" />
+                  </button>
 
-              {/* Mobile & Desktop Actions Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setActionMenuId(actionMenuId === file.id ? null : file.id)}
-                  className="p-2 rounded hover:bg-dark-500 transition-colors"
-                >
-                  <MoreVertical className="w-4 h-4 text-gray-400" />
-                </button>
+                  {/* Actions Menu */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setActionMenuId(actionMenuId === file.id ? null : file.id)}
+                      className="p-2 rounded hover:bg-dark-500 transition-colors"
+                    >
+                      <MoreVertical className="w-4 h-4 text-gray-400" />
+                    </button>
 
-                {actionMenuId === file.id && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setActionMenuId(null)}
-                    />
-                    <div className="absolute right-0 bottom-full mb-1 z-20 bg-dark-700 border border-dark-500
-                                  rounded-lg shadow-lg py-1 min-w-[140px]">
-                      <button
-                        onClick={() => {
-                          onPreview(file);
-                          setActionMenuId(null);
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-600
-                                 flex items-center gap-2"
-                      >
-                        <Eye className="w-4 h-4" /> Preview
-                      </button>
-                      <button
-                        onClick={() => handleStartEdit(file)}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-600
-                                 flex items-center gap-2"
-                      >
-                        <Edit2 className="w-4 h-4" /> Rename
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleCopyLink(file.url);
-                          setActionMenuId(null);
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-600
-                                 flex items-center gap-2"
-                      >
-                        <Copy className="w-4 h-4" /> Copy link
-                      </button>
-                      <hr className="my-1 border-dark-500" />
-                      <button
-                        onClick={() => {
-                          if (confirm('Are you sure you want to delete this file?')) {
-                            handleDelete(file.id);
-                          }
-                          setActionMenuId(null);
-                        }}
-                        disabled={deletingId === file.id}
-                        className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10
-                                 flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        {deletingId === file.id ? 'Deleting...' : 'Delete'}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+                    {actionMenuId === file.id && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-10"
+                          onClick={() => setActionMenuId(null)}
+                        />
+                        <div className="absolute right-0 bottom-full mb-1 z-20 bg-dark-700 border border-dark-500
+                                      rounded-lg shadow-lg py-1 min-w-[140px]">
+                          <button
+                            onClick={() => {
+                              onPreview(file);
+                              setActionMenuId(null);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-600
+                                     flex items-center gap-2"
+                          >
+                            <Eye className="w-4 h-4" /> Preview
+                          </button>
+                          <button
+                            onClick={() => handleStartEdit(file)}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-600
+                                     flex items-center gap-2"
+                          >
+                            <Edit2 className="w-4 h-4" /> Rename
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleCopyLink(file.url);
+                              setActionMenuId(null);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-dark-600
+                                     flex items-center gap-2"
+                          >
+                            <Copy className="w-4 h-4" /> Copy link
+                          </button>
+                          <hr className="my-1 border-dark-500" />
+                          <button
+                            onClick={() => {
+                              if (confirm('Are you sure you want to delete this file?')) {
+                                handleDelete(file.id);
+                              }
+                              setActionMenuId(null);
+                            }}
+                            disabled={deletingId === file.id}
+                            className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10
+                                     flex items-center gap-2 disabled:opacity-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            {deletingId === file.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ))}
