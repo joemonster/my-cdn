@@ -15,6 +15,7 @@ import {
   Grid3X3,
   Loader2,
   HelpCircle,
+  Trash2,
 } from 'lucide-react';
 import { api, FileData, SortField, SortOrder, FileTypeFilter, PaginationInfo } from '@/lib/api';
 import { FileTable } from '@/components/FileTable';
@@ -327,6 +328,14 @@ export default function DashboardPage() {
               >
                 <HelpCircle className="w-5 h-5" />
               </button>
+              <a
+                href="/dashboard/trash"
+                className="p-2 rounded-lg bg-dark-600 hover:bg-red-500/20 hover:text-red-400
+                         transition-colors"
+                title="Trash"
+              >
+                <Trash2 className="w-5 h-5" />
+              </a>
               <button
                 onClick={handleLogout}
                 className="p-2 rounded-lg bg-dark-600 hover:bg-red-500/20 hover:text-red-400
