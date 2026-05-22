@@ -56,6 +56,7 @@ function parseQueryParams(searchParams: URLSearchParams): FilesQueryParams {
     : 'all';
 
   const search = searchParams.get('search') || undefined;
+  const trash = searchParams.get('trash') === 'true';
 
-  return { page, limit, sort, order, type, search };
+  return { page, limit, sort, order, type, search, trash };
 }
