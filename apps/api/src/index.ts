@@ -6,6 +6,7 @@ import { handleGetFiles } from './routes/files';
 import { handleGetFile, handleUpdateFile, handleDeleteFile, handleRestoreFile, handleGetFileContent } from './routes/file';
 import { handleViewPage } from './routes/view';
 import { handleAiGenerate, cleanupExpiredImages } from './routes/aigenerate';
+import { cleanupTrash } from './utils/trash';
 import { getFromR2 } from './utils/storage';
 import { jsonResponse, errorResponse, successResponse } from './utils/response';
 
@@ -17,8 +18,11 @@ const corsHeaders = {
 };
 
 export default {
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    await cleanupExpiredImages(env);
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(Promise.all([
+      cleanupExpiredImages(env),
+      cleanupTrash(env),
+    ]).then(() => undefined));
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
