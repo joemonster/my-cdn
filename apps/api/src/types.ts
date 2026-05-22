@@ -20,6 +20,7 @@ export interface FileRecord {
   duration: number | null;
   thumbnail_path: string | null;
   bucket: string | null;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -38,6 +39,7 @@ export interface FileResponse {
   height?: number | null;
   duration?: number | null;
   bucket?: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -83,6 +85,7 @@ export interface FilesQueryParams {
   order: SortOrder;
   type: FileTypeFilter;
   search?: string;
+  trash?: boolean;
 }
 
 export const ALLOWED_IMAGE_TYPES = [

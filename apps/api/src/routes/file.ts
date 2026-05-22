@@ -1,5 +1,5 @@
 import { Env } from '../types';
-import { getFileById, updateFile, deleteFile, fileRecordToResponse } from '../utils/db';
+import { getFileById, updateFile, hardDeleteFile, fileRecordToResponse } from '../utils/db';
 import { deleteFromR2, uploadToR2 } from '../utils/storage';
 import { errorResponse, successResponse } from '../utils/response';
 
@@ -108,7 +108,7 @@ export async function handleDeleteFile(
       await deleteFromR2(env.BUCKET, file.thumbnail_path);
     }
 
-    await deleteFile(env.DB, fileId);
+    await hardDeleteFile(env.DB, fileId);
 
     return successResponse({ message: 'File deleted successfully' });
   } catch (error) {

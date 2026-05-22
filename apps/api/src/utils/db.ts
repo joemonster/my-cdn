@@ -94,8 +94,38 @@ export async function updateFile(
   return await getFileById(db, id);
 }
 
-export async function deleteFile(db: D1Database, id: string): Promise<void> {
+export async function hardDeleteFile(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM files WHERE id = ?').bind(id).run();
+}
+
+export async function softDeleteFile(
+  db: D1Database,
+  id: string,
+  newStoredPath: string,
+  newThumbnailPath: string | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `UPDATE files SET stored_path = ?, thumbnail_path = ?, deleted_at = ?, updated_at = ? WHERE id = ?`
+    )
+    .bind(newStoredPath, newThumbnailPath, now, now, id)
+    .run();
+}
+
+export async function restoreFile(
+  db: D1Database,
+  id: string,
+  newStoredPath: string,
+  newThumbnailPath: string | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await db
+    .prepare(
+      `UPDATE files SET stored_path = ?, thumbnail_path = ?, deleted_at = NULL, updated_at = ? WHERE id = ?`
+    )
+    .bind(newStoredPath, newThumbnailPath, now, id)
+    .run();
 }
 
 export async function getFiles(
@@ -117,6 +147,12 @@ export async function getFiles(
   if (search) {
     conditions.push('original_name LIKE ?');
     bindings.push(`%${search}%`);
+  }
+
+  if (params.trash) {
+    conditions.push('deleted_at IS NOT NULL');
+  } else {
+    conditions.push('deleted_at IS NULL');
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -177,6 +213,7 @@ export function fileRecordToResponse(
     file_size: file.file_size,
     file_type: file.file_type,
     bucket: file.bucket,
+    deleted_at: file.deleted_at,
     created_at: file.created_at,
   };
 
