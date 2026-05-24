@@ -524,6 +524,7 @@ export default function DashboardPage() {
           files={files}
           onClose={() => setPreviewFile(null)}
           onNavigate={setPreviewFile}
+          onDeleted={fetchFiles}
         />
       )}
 

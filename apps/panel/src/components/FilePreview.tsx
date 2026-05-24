@@ -1,8 +1,9 @@
 'use client';
 
-import { X, Download, ExternalLink, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Download, ExternalLink, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { FileData, formatFileSize, formatDate } from '@/lib/api';
+import { FileData, formatFileSize, formatDate, api } from '@/lib/api';
+import toast from 'react-hot-toast';
 
 const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3];
 
@@ -21,9 +22,27 @@ interface FilePreviewProps {
   files: FileData[];
   onClose: () => void;
   onNavigate: (file: FileData) => void;
+  onDeleted?: () => void;
 }
 
-export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewProps) {
+export function FilePreview({ file, files, onClose, onNavigate, onDeleted }: FilePreviewProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirm(`Move "${file.original_name}" to trash?`)) return;
+    setIsDeleting(true);
+    try {
+      await api.deleteFile(file.id);
+      toast.success('Moved to trash');
+      onDeleted?.();
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const [zoom, setZoom] = useState(1);
   const [initialZoom, setInitialZoom] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -36,7 +55,7 @@ export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewPro
     const container = containerRef.current;
     if (!container) return;
     setNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
-    const padding = 32;
+    const padding = 8;
     const cw = container.clientWidth - padding;
     const ch = container.clientHeight - padding;
     const fit = fitZoomStep(img.naturalWidth, img.naturalHeight, cw, ch);
@@ -93,12 +112,12 @@ export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewPro
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-6xl max-h-[90vh] m-4 flex flex-col bg-dark-800
+        className="relative w-full max-w-[96vw] max-h-[96vh] m-2 flex flex-col bg-dark-800
                    rounded-xl border border-dark-600 overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-dark-600">
+        <div className="flex items-center justify-between p-3 border-b border-dark-600">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-medium text-white truncate max-w-md">
               {file.original_name}
@@ -152,6 +171,15 @@ export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewPro
               <Download className="w-4 h-4 text-gray-400" />
             </a>
             <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="p-2 rounded-lg bg-dark-600 hover:bg-red-500/20 hover:text-red-400
+                         transition-colors disabled:opacity-50"
+              title="Move to trash"
+            >
+              <Trash2 className="w-4 h-4 text-gray-400" />
+            </button>
+            <button
               onClick={onClose}
               className="p-2 rounded-lg bg-dark-600 hover:bg-red-500/20 hover:text-red-400
                          transition-colors ml-2"
@@ -163,7 +191,7 @@ export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewPro
         </div>
 
         {/* Preview Content */}
-        <div ref={containerRef} className="flex-1 overflow-auto p-4 flex items-center justify-center min-h-[400px] relative">
+        <div ref={containerRef} className="flex-1 overflow-auto min-h-[400px] relative">
           {hasPrev && (
             <button
               onClick={handlePrev}
@@ -175,30 +203,29 @@ export function FilePreview({ file, files, onClose, onNavigate }: FilePreviewPro
             </button>
           )}
 
-          {isImage ? (
-            <div className="overflow-auto flex items-center justify-center" style={{ maxWidth: '100%', maxHeight: '100%' }}>
+          <div className="min-w-full min-h-full flex items-center justify-center p-1">
+            {isImage ? (
               <img
                 src={file.url}
                 alt={file.original_name}
                 onLoad={handleImageLoad}
                 style={naturalSize ? {
                   width: naturalSize.w * zoom,
-                  minWidth: naturalSize.w * zoom,
                   height: 'auto',
                 } : undefined}
-                className="transition-all duration-200"
+                className="transition-all duration-200 block"
               />
-            </div>
-          ) : (
-            <video
-              src={file.url}
-              controls
-              autoPlay
-              className="max-w-full max-h-full rounded-lg"
-            >
-              Your browser does not support the video tag.
-            </video>
-          )}
+            ) : (
+              <video
+                src={file.url}
+                controls
+                autoPlay
+                className="max-w-full max-h-full rounded-lg"
+              >
+                Your browser does not support the video tag.
+              </video>
+            )}
+          </div>
 
           {hasNext && (
             <button
