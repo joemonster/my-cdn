@@ -101,8 +101,12 @@ export const ALLOWED_VIDEO_TYPES = [
   'video/webm',
 ] as const;
 
-export const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-export const MAX_VIDEO_SIZE = 15 * 1024 * 1024; // 15MB
+export {
+  MAX_IMAGE_SIZE,
+  MAX_VIDEO_SIZE,
+  MAX_IMAGE_SIZE_MB,
+  MAX_VIDEO_SIZE_MB,
+} from '../../../packages/shared/limits';
 
 export const MIME_TO_EXTENSION: Record<string, string> = {
   'image/jpeg': 'jpg',

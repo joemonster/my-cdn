@@ -1,7 +1,7 @@
-import { Env } from '../types';
+import { Env, MAX_VIDEO_SIZE } from '../types';
 import { errorResponse } from '../utils/response';
 
-const MAX_BYTES = 15 * 1024 * 1024; // 15MB — matches video upload cap
+const MAX_BYTES = MAX_VIDEO_SIZE; // matches video upload cap
 const FETCH_TIMEOUT_MS = 15000;
 
 export async function handleFetchUrl(request: Request, env: Env): Promise<Response> {

@@ -3,6 +3,7 @@
 import { X, Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { MAX_IMAGE_SIZE_MB, MAX_VIDEO_SIZE_MB } from '@/lib/limits';
 
 interface ApiDocsModalProps {
   onClose: () => void;
@@ -51,8 +52,8 @@ Upload a file (image or video).
   - \`bucket\` (optional): Label/tag stored in DB and displayed in dashboard (for organizing files)
 
 **Limits:**
-- Images: max 5MB (jpg, jpeg, png, webp, gif)
-- Videos: max 15MB (mp4, webm)
+- Images: max ${MAX_IMAGE_SIZE_MB}MB (jpg, jpeg, png, webp, gif)
+- Videos: max ${MAX_VIDEO_SIZE_MB}MB (mp4, webm)
 
 **Response (201):**
 \`\`\`json
@@ -424,7 +425,7 @@ All errors return JSON with this format:
                   <code className="text-white font-mono">/api/upload</code>
                 </div>
                 <p className="text-gray-400 text-sm mb-2">Upload image or video file (multipart/form-data)</p>
-                <p className="text-gray-500 text-xs mb-1">Limits: Images 5MB, Videos 15MB</p>
+                <p className="text-gray-500 text-xs mb-1">Limits: Images {MAX_IMAGE_SIZE_MB}MB, Videos {MAX_VIDEO_SIZE_MB}MB</p>
                 <p className="text-gray-500 text-xs">Optional: prefix (prepend to filename), bucket (label/tag)</p>
               </div>
 

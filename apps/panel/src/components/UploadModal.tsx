@@ -4,9 +4,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { X, Upload, FileImage, FileVideo, AlertCircle, CheckCircle, Link2, ClipboardPaste, Loader2 } from 'lucide-react';
 import { api, generateImageThumbnail, generateVideoThumbnail, formatFileSize } from '@/lib/api';
 import toast from 'react-hot-toast';
+import { MAX_IMAGE_SIZE, MAX_VIDEO_SIZE, MAX_IMAGE_SIZE_MB, MAX_VIDEO_SIZE_MB } from '@/lib/limits';
 
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_VIDEO_SIZE = 15 * 1024 * 1024; // 15MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm'];
 const CONVERTIBLE_IMAGE_MIMES = ['image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff'];
@@ -342,7 +341,7 @@ export function UploadModal({ onClose, onUploadComplete }: UploadModalProps) {
               or click to select files
             </p>
             <p className="text-xs text-gray-600 mt-4 font-mono">
-              Images: JPG, PNG, WebP, GIF (max 5MB) | Videos: MP4, WebM (max 15MB)
+              Images: JPG, PNG, WebP, GIF (max {MAX_IMAGE_SIZE_MB}MB) | Videos: MP4, WebM (max {MAX_VIDEO_SIZE_MB}MB)
             </p>
             <p className="text-xs text-gray-600 mt-1 font-mono">
               AVIF / HEIC / HEIF / BMP / TIFF auto-converted to JPG
