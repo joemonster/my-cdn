@@ -2,7 +2,46 @@ import { Env, MAX_VIDEO_SIZE } from '../types';
 import { errorResponse } from '../utils/response';
 
 const MAX_BYTES = MAX_VIDEO_SIZE; // matches video upload cap
-const FETCH_TIMEOUT_MS = 15000;
+// Covers the whole transfer, headers and body, so it has to fit a MAX_BYTES
+// download rather than just the initial response.
+const FETCH_TIMEOUT_MS = 60000;
+
+type CappedRead =
+  | { ok: true; buffer: ArrayBuffer }
+  | { ok: false; reason: 'too-large' | 'no-body' };
+
+/**
+ * Read the body while counting bytes, aborting as soon as the cap is passed.
+ * Buffering first and checking the size afterwards would let an upstream that
+ * lies about (or omits) content-length pull far more than MAX_BYTES into the
+ * Worker's 128MB of memory.
+ */
+async function readCapped(res: Response, maxBytes: number): Promise<CappedRead> {
+  const reader = res.body?.getReader();
+  if (!reader) return { ok: false, reason: 'no-body' };
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return { ok: false, reason: 'too-large' };
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, buffer: merged.buffer };
+}
 
 export async function handleFetchUrl(request: Request, env: Env): Promise<Response> {
   let targetUrl: string;
@@ -47,53 +86,60 @@ export async function handleFetchUrl(request: Request, env: Env): Promise<Respon
     const msg = err instanceof Error ? err.message : 'Network error';
     return errorResponse(`Fetch failed: ${msg}`, 502);
   }
-  clearTimeout(timeoutId);
 
-  if (!upstream.ok) {
-    return errorResponse(`Upstream returned HTTP ${upstream.status}`, 502);
-  }
-
-  const contentLengthHeader = upstream.headers.get('content-length');
-  if (contentLengthHeader) {
-    const declared = parseInt(contentLengthHeader, 10);
-    if (Number.isFinite(declared) && declared > MAX_BYTES) {
-      return errorResponse(
-        `File too large: ${declared} bytes (max ${MAX_BYTES})`,
-        413
-      );
-    }
-  }
-
-  let buffer: ArrayBuffer;
+  // The timeout stays armed until the body is fully read — clearing it here
+  // would leave a 50MB download able to hang indefinitely.
   try {
-    buffer = await upstream.arrayBuffer();
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Failed to read body';
-    return errorResponse(`Download failed: ${msg}`, 502);
-  }
+    if (!upstream.ok) {
+      return errorResponse(`Upstream returned HTTP ${upstream.status}`, 502);
+    }
 
-  if (buffer.byteLength === 0) {
-    return errorResponse('Downloaded body is empty', 502);
-  }
-  if (buffer.byteLength > MAX_BYTES) {
-    return errorResponse(
-      `File too large: ${buffer.byteLength} bytes (max ${MAX_BYTES})`,
-      413
-    );
-  }
+    const contentLengthHeader = upstream.headers.get('content-length');
+    if (contentLengthHeader) {
+      const declared = parseInt(contentLengthHeader, 10);
+      if (Number.isFinite(declared) && declared > MAX_BYTES) {
+        return errorResponse(
+          `File too large: ${declared} bytes (max ${MAX_BYTES})`,
+          413
+        );
+      }
+    }
 
-  const contentType =
-    upstream.headers.get('content-type')?.split(';')[0].trim() ||
-    'application/octet-stream';
-  const filename = parsed.pathname.split('/').pop() || 'download';
+    let read: CappedRead;
+    try {
+      read = await readCapped(upstream, MAX_BYTES);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to read body';
+      return errorResponse(`Download failed: ${msg}`, 502);
+    }
 
-  return new Response(buffer, {
-    status: 200,
-    headers: {
-      'Content-Type': contentType,
-      'Content-Length': buffer.byteLength.toString(),
-      'X-Original-Filename': encodeURIComponent(filename),
-      'Access-Control-Expose-Headers': 'X-Original-Filename',
-    },
-  });
+    if (!read.ok) {
+      if (read.reason === 'too-large') {
+        return errorResponse(`File too large: exceeds ${MAX_BYTES} bytes`, 413);
+      }
+      return errorResponse('Downloaded body is empty', 502);
+    }
+
+    const buffer = read.buffer;
+    if (buffer.byteLength === 0) {
+      return errorResponse('Downloaded body is empty', 502);
+    }
+
+    const contentType =
+      upstream.headers.get('content-type')?.split(';')[0].trim() ||
+      'application/octet-stream';
+    const filename = parsed.pathname.split('/').pop() || 'download';
+
+    return new Response(buffer, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': buffer.byteLength.toString(),
+        'X-Original-Filename': encodeURIComponent(filename),
+        'Access-Control-Expose-Headers': 'X-Original-Filename',
+      },
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
