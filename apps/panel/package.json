@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "deploy": "wrangler pages deploy out --project-name=my-cdn-panel"
+    "deploy": "wrangler pages deploy"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

@@ -1,5 +1,6 @@
 {
   "name": "my-cdn-api",
+  "account_id": "48da453daf19717efc4534e0a9ba1a8a",
   "main": "src/index.ts",
   "compatibility_date": "2024-01-01",
   "vars": {
